@@ -1,0 +1,23 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno (NUNCA subir credenciales al repositorio)
+.env
+.env.local
+
+# Builds
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Configuracion local de herramientas
+.claude/

@@ -1,0 +1,233 @@
+/* ==========================================================
+   AnimalCare - Estilos base compartidos
+   Paleta: blanco + verdes suaves (identidad veterinaria)
+   ========================================================== */
+
+:root {
+  --verde-50: #f2f9f5;
+  --verde-100: #dff0e6;
+  --verde-200: #bfe2ce;
+  --verde-500: #2f9e68;
+  --verde-600: #258355;
+  --verde-700: #1c6742;
+
+  --texto: #1f2a37;
+  --texto-suave: #6b7280;
+  --borde: #e2e8f0;
+  --blanco: #ffffff;
+
+  --error-fondo: #fdeceb;
+  --error-borde: #f5c2be;
+  --error-texto: #b3261e;
+
+  --exito-fondo: #eaf7ef;
+  --exito-borde: #b7e3c8;
+  --exito-texto: #1c6742;
+
+  --radio: 12px;
+  --sombra: 0 4px 16px rgba(31, 42, 55, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  color: var(--texto);
+  background-color: var(--blanco);
+  line-height: 1.5;
+}
+
+h1, h2, h3 {
+  margin: 0 0 8px;
+  line-height: 1.25;
+}
+
+a {
+  color: var(--verde-600);
+  font-weight: 600;
+}
+
+/* ---------- Formularios ---------- */
+
+.campo {
+  margin-bottom: 16px;
+}
+
+.campo label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Marca visual de campo obligatorio (requisito de usabilidad) */
+.obligatorio {
+  color: var(--verde-600);
+  margin-left: 2px;
+}
+
+.campo input,
+.campo select,
+.campo textarea {
+  width: 100%;
+  padding: 11px 13px;
+  font-size: 1rem;
+  font-family: inherit;
+  color: var(--texto);
+  background-color: var(--blanco);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.campo input:focus,
+.campo select:focus,
+.campo textarea:focus {
+  outline: none;
+  border-color: var(--verde-500);
+  box-shadow: 0 0 0 3px var(--verde-100);
+}
+
+.campo input.con-error,
+.campo select.con-error,
+.campo textarea.con-error {
+  border-color: var(--error-borde);
+  background-color: var(--error-fondo);
+}
+
+.campo textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.ayuda {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--texto-suave);
+}
+
+/* ---------- Botones ---------- */
+
+.boton {
+  display: inline-block;
+  width: 100%;
+  padding: 12px 18px;
+  font-size: 1rem;
+  font-family: inherit;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: var(--radio);
+  cursor: pointer;
+}
+
+.boton-primario {
+  color: var(--blanco);
+  background-color: var(--verde-600);
+}
+
+.boton-primario:hover {
+  background-color: var(--verde-700);
+}
+
+.boton-secundario {
+  color: var(--verde-700);
+  background-color: var(--blanco);
+  border-color: var(--verde-200);
+}
+
+.boton-secundario:hover {
+  background-color: var(--verde-50);
+}
+
+.boton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.boton-auto {
+  width: auto;
+}
+
+/* ---------- Mensajes de exito y error ---------- */
+
+.alerta {
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border: 1px solid;
+  border-radius: var(--radio);
+  font-size: 0.92rem;
+}
+
+.alerta-error {
+  color: var(--error-texto);
+  background-color: var(--error-fondo);
+  border-color: var(--error-borde);
+}
+
+.alerta-exito {
+  color: var(--exito-texto);
+  background-color: var(--exito-fondo);
+  border-color: var(--exito-borde);
+}
+
+.alerta ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+
+/* ---------- Paginas internas ---------- */
+
+.cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 24px;
+  background-color: var(--blanco);
+  border-bottom: 1px solid var(--borde);
+}
+
+.cabecera-marca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--verde-700);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.contenedor {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.tarjeta {
+  padding: 24px;
+  margin-bottom: 20px;
+  background-color: var(--blanco);
+  border: 1px solid var(--borde);
+  border-radius: 16px;
+  box-shadow: var(--sombra);
+}
+
+.pagina {
+  min-height: 100vh;
+  background-color: var(--verde-50);
+}
+
+.acciones {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.texto-suave {
+  color: var(--texto-suave);
+}

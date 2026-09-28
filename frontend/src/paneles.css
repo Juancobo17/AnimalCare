@@ -1,0 +1,514 @@
+/* ==========================================================
+   AnimalCare - Pantallas privadas del Sprint 1
+   Registro por rol, veterinarios, agendamiento y citas.
+   Depende de las variables de color definidas en index.css.
+   ========================================================== */
+
+/* ---------- Secciones de formulario ---------- */
+
+.titulo-seccion {
+  margin: 28px 0 14px;
+  padding-top: 18px;
+  font-size: 1.05rem;
+  border-top: 1px solid var(--borde);
+}
+
+.ayuda-bloque {
+  margin: -6px 0 16px;
+}
+
+.boton-enviar {
+  margin-top: 24px;
+}
+
+/* Dos campos en la misma linea cuando hay espacio */
+.fila {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+}
+
+/* ---------- Selector de opciones en tarjeta ----------
+   Se usa para el tipo de cuenta (cliente / veterinario)
+   y para la modalidad de atencion (domicilio / veterinaria). */
+
+.selector-rol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 0 0 20px;
+  padding: 0;
+  border: 0;
+}
+
+.selector-rol legend {
+  margin-bottom: 8px;
+  padding: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.opcion-rol {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px;
+  background-color: var(--blanco);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  cursor: pointer;
+}
+
+.opcion-rol:hover {
+  border-color: var(--verde-200);
+}
+
+.opcion-rol.activa {
+  border-color: var(--verde-500);
+  background-color: var(--verde-50);
+  box-shadow: 0 0 0 3px var(--verde-100);
+}
+
+/* El radio real queda oculto: la tarjeta completa es el control,
+   pero el campo sigue existiendo para el teclado y los lectores
+   de pantalla. */
+.opcion-rol input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.opcion-rol-titulo {
+  font-weight: 600;
+  color: var(--verde-700);
+}
+
+.opcion-rol-texto {
+  font-size: 0.85rem;
+  color: var(--texto-suave);
+}
+
+/* ---------- Casillas de verificacion ---------- */
+
+.grupo-casillas {
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+}
+
+.grupo-casillas legend {
+  margin-bottom: 8px;
+  padding: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.casilla {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.casilla input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--verde-600);
+}
+
+/* ---------- Filas de servicios del veterinario ---------- */
+
+.servicio-fila {
+  display: grid;
+  grid-template-columns: 1fr 110px 110px auto;
+  align-items: start;
+  gap: 0 12px;
+}
+
+.campo-corto {
+  min-width: 0;
+}
+
+.boton-enlace {
+  margin-top: 30px;
+  padding: 0;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--error-texto);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.boton-enlace:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Cabecera con menu ---------- */
+
+.cabecera-marca {
+  text-decoration: none;
+}
+
+.cabecera-menu {
+  display: flex;
+  gap: 20px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.cabecera-enlace {
+  padding: 6px 0;
+  color: var(--texto-suave);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.cabecera-enlace:hover {
+  color: var(--verde-700);
+}
+
+.cabecera-enlace.active {
+  color: var(--verde-700);
+  border-bottom-color: var(--verde-500);
+}
+
+/* ---------- Encabezados de seccion y enlaces ---------- */
+
+.encabezado-seccion {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.encabezado-seccion h1,
+.encabezado-seccion h3 {
+  margin-bottom: 0;
+}
+
+.enlace-seccion {
+  font-size: 0.9rem;
+}
+
+.enlace-volver {
+  display: inline-block;
+  margin-bottom: 16px;
+  font-size: 0.92rem;
+  text-decoration: none;
+}
+
+.enlace-volver:hover {
+  text-decoration: underline;
+}
+
+.acciones-panel {
+  margin-top: 18px;
+}
+
+/* ---------- Lista de datos ---------- */
+
+.datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin: 18px 0 0;
+}
+
+.datos dt {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.datos dd {
+  margin: 2px 0 0;
+}
+
+/* ---------- Etiquetas de estado ---------- */
+
+.etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.etiqueta {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.etiqueta-modalidad {
+  color: var(--verde-700);
+  background-color: var(--verde-50);
+  border-color: var(--verde-200);
+}
+
+.etiqueta-pending {
+  color: #8a5a00;
+  background-color: #fff6e5;
+  border-color: #f5dcae;
+}
+
+.etiqueta-confirmed {
+  color: var(--exito-texto);
+  background-color: var(--exito-fondo);
+  border-color: var(--exito-borde);
+}
+
+.etiqueta-cancelled {
+  color: var(--error-texto);
+  background-color: var(--error-fondo);
+  border-color: var(--error-borde);
+}
+
+.etiqueta-completed {
+  color: var(--texto-suave);
+  background-color: #f3f4f6;
+  border-color: var(--borde);
+}
+
+/* ---------- Listado de veterinarios ---------- */
+
+.filtros {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 0 16px;
+  margin-top: 18px;
+}
+
+.filtros .campo {
+  margin-bottom: 0;
+}
+
+.lista-veterinarios {
+  display: grid;
+  gap: 16px;
+}
+
+.tarjeta-veterinario {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 0;
+}
+
+.tarjeta-veterinario p {
+  margin: 4px 0;
+}
+
+/* ---------- Perfil del veterinario ---------- */
+
+.texto-presentacion {
+  margin: 12px 0 0;
+  padding-left: 14px;
+  border-left: 3px solid var(--verde-200);
+  color: var(--texto);
+}
+
+.lista-servicios,
+.lista-horario {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lista-servicios li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--borde);
+}
+
+.lista-servicios li:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.lista-servicios p {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+}
+
+.precio {
+  font-weight: 700;
+  color: var(--verde-700);
+  white-space: nowrap;
+}
+
+.lista-horario li {
+  display: flex;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--borde);
+}
+
+.lista-horario li:last-child {
+  border-bottom: 0;
+}
+
+.lista-horario .dia {
+  min-width: 110px;
+  font-weight: 600;
+}
+
+/* ---------- Seleccion de horario (AN-13) ---------- */
+
+.horarios {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.horario {
+  padding: 10px 6px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--verde-700);
+  background-color: var(--blanco);
+  border: 1px solid var(--verde-200);
+  border-radius: var(--radio);
+  cursor: pointer;
+}
+
+.horario:hover {
+  background-color: var(--verde-50);
+}
+
+.horario.activo {
+  color: var(--blanco);
+  background-color: var(--verde-600);
+  border-color: var(--verde-600);
+}
+
+.resumen {
+  margin-top: 24px;
+  padding: 16px;
+  background-color: var(--verde-50);
+  border: 1px solid var(--verde-200);
+  border-radius: var(--radio);
+}
+
+.resumen p {
+  margin: 6px 0 0;
+}
+
+/* ---------- Listado de citas ---------- */
+
+.lista-citas {
+  display: grid;
+  gap: 14px;
+}
+
+.cita {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 16px;
+  background-color: var(--blanco);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.cita-fecha {
+  display: flex;
+  flex-direction: column;
+  min-width: 132px;
+  padding-right: 18px;
+  border-right: 1px solid var(--borde);
+}
+
+.cita-hora {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--verde-700);
+}
+
+.cita-dia {
+  font-size: 0.82rem;
+  color: var(--texto-suave);
+}
+
+.cita-datos {
+  flex: 1;
+  min-width: 0;
+}
+
+.cita-datos h4 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.cita-datos p {
+  margin: 2px 0;
+  font-size: 0.9rem;
+}
+
+.cita-notas {
+  font-style: italic;
+  color: var(--texto-suave);
+}
+
+/* ---------- Pantallas pequenas ---------- */
+
+@media (max-width: 720px) {
+  .fila,
+  .selector-rol,
+  .filtros,
+  .servicio-fila {
+    grid-template-columns: 1fr;
+  }
+
+  .boton-enlace {
+    margin: 0 0 16px;
+    text-align: left;
+  }
+
+  .tarjeta-veterinario {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cita {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .cita-fecha {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+    padding: 0 0 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--borde);
+  }
+
+  .cabecera-menu {
+    order: 3;
+    width: 100%;
+    margin: 0;
+  }
+}

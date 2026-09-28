@@ -1,0 +1,167 @@
+// Esquema de base de datos de AnimalCare
+// Motor: MySQL  |  ORM: Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Estado de una mascota.
+// Las mascotas NO se eliminan fisicamente: se desactivan (ACTIVE -> INACTIVE).
+enum PetStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// Tipo de cuenta. Se elige al registrarse (AN-6 cliente, AN-7 veterinario).
+enum Role {
+  CLIENT
+  VETERINARIAN
+}
+
+// Modalidad de atencion de una cita.
+// HOME   -> el veterinario va al domicilio del cliente (AN-10)
+// CLINIC -> el cliente lleva la mascota a la veterinaria (AN-11)
+enum CareMode {
+  HOME
+  CLINIC
+}
+
+// Ciclo de vida de una cita. Al agendarse queda PENDING.
+// Las transiciones posteriores se trabajan en sprints siguientes.
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(CLIENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Un usuario puede tener muchas mascotas (1:N)
+  pets Pet[]
+
+  // Solo los usuarios con rol VETERINARIAN tienen perfil profesional (1:1)
+  vetProfile VetProfile?
+
+  // Citas que este usuario agendo como cliente
+  appointments Appointment[] @relation("ClientAppointments")
+}
+
+model Pet {
+  id        Int       @id @default(autoincrement())
+  name      String
+  species   String
+  sex       String
+  birthDate DateTime
+  weight    Decimal?  @db.Decimal(6, 2)
+  status    PetStatus @default(ACTIVE)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Toda mascota pertenece obligatoriamente a un usuario
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+// Datos profesionales del veterinario (AN-7 y AN-26).
+// Se crea en la misma transaccion que el usuario al registrarse.
+model VetProfile {
+  id        Int      @id @default(autoincrement())
+  license   String   @unique // numero de matricula profesional
+  specialty String
+  bio       String?  @db.Text
+  phone     String?
+  // Direccion del consultorio. Obligatoria si atiende en veterinaria.
+  address   String?
+
+  // Modalidades que ofrece. Controlan que puede elegir el cliente (AN-10 / AN-11).
+  homeService   Boolean @default(false)
+  clinicService Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id])
+
+  services       Service[]
+  availabilities Availability[]
+  appointments   Appointment[]
+}
+
+// Servicio que ofrece un veterinario (consulta, vacunacion, bano...).
+// Se muestran en el perfil detallado (AN-26).
+model Service {
+  id              Int      @id @default(autoincrement())
+  name            String
+  description     String?  @db.Text
+  price           Decimal  @db.Decimal(10, 2)
+  durationMinutes Int      @default(30)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  vetProfileId Int
+  vetProfile   VetProfile @relation(fields: [vetProfileId], references: [id])
+
+  appointments Appointment[]
+
+  @@index([vetProfileId])
+}
+
+// Horario semanal de atencion del veterinario.
+// De aqui salen los horarios disponibles que ve el cliente (AN-13).
+model Availability {
+  id        Int      @id @default(autoincrement())
+  weekday   Int // 0 = domingo ... 6 = sabado
+  startTime String // "09:00"
+  endTime   String // "13:00"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vetProfileId Int
+  vetProfile   VetProfile @relation(fields: [vetProfileId], references: [id])
+
+  @@index([vetProfileId])
+}
+
+// Cita agendada por un cliente con un veterinario (AN-10, AN-11, AN-13).
+model Appointment {
+  id              Int               @id @default(autoincrement())
+  mode            CareMode
+  scheduledAt     DateTime // fecha y hora de inicio
+  durationMinutes Int
+  // Direccion de la visita. Obligatoria cuando la modalidad es HOME.
+  address         String?
+  notes           String?           @db.Text
+  status          AppointmentStatus @default(PENDING)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  clientId Int
+  client   User @relation("ClientAppointments", fields: [clientId], references: [id])
+
+  vetProfileId Int
+  vetProfile   VetProfile @relation(fields: [vetProfileId], references: [id])
+
+  // El servicio es opcional: se puede agendar una consulta general.
+  serviceId Int?
+  service   Service? @relation(fields: [serviceId], references: [id])
+
+  @@index([clientId])
+  @@index([vetProfileId, scheduledAt])
+}
