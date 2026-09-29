@@ -20,6 +20,7 @@ services:
     environment:
       DATABASE_URL: "mysql://root:rootpassword@db:3306/animalcare"
       PORT: 3000
+      JWT_SECRET: "animalcare_secret_key_2026"
     depends_on:
       - db
 
@@ -27,7 +28,7 @@ services:
     build: ./frontend
     restart: always
     ports:
-      - "80:80"
+      - "8080:80"
     depends_on:
       - backend
 
