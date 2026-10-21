@@ -1,0 +1,10 @@
+{
+  "devDependencies": {
+    "prisma": "^8.0.0-rc.17"
+  },
+
+  "scripts": {
+    "db:push": "./node_modules/prisma/build/index.js db push",
+    "db:migrate": "./node_modules/prisma/build/index.js migrate dev --name init"
+  }
+}
