@@ -1,0 +1,258 @@
+/* ==========================================================
+   Pantallas de autenticacion (login y registro)
+   Panel izquierdo: fotografia a pantalla completa con el mensaje encima.
+   Panel derecho: formulario sobre tarjeta blanca.
+   En moviles la fotografia pasa a ser una banda superior.
+   ========================================================== */
+
+.auth {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ---------- Panel de la fotografia ---------- */
+
+.auth-presentacion {
+  position: relative;
+  flex: 1.1;
+  overflow: hidden;
+  color: var(--blanco);
+  background-color: var(--verde-700);
+}
+
+.auth-marca {
+  position: absolute;
+  top: 32px;
+  left: 40px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  /* Sombra suave para que el logo se lea sobre cualquier fotografia */
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.auth-marca span {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+/* ---------- Carrusel ---------- */
+
+.carrusel {
+  position: absolute;
+  inset: 0;
+}
+
+/* Las escenas se apilan una sobre otra y se alternan con un fundido. */
+.carrusel-escena {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.9s ease;
+}
+
+.carrusel-escena.activa {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* La fotografia cubre todo el panel sin deformarse. */
+.carrusel-imagen {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Capa verde sobre la fotografia: mantiene la identidad de AnimalCare
+   y garantiza que el texto blanco se lea bien. */
+.carrusel-escena::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(23, 88, 56, 0.94) 0%,
+    rgba(28, 103, 66, 0.72) 42%,
+    rgba(47, 158, 104, 0.34) 100%
+  );
+}
+
+.carrusel-texto {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  padding: 40px 40px 84px;
+}
+
+.carrusel-texto h2 {
+  max-width: 460px;
+  margin-bottom: 10px;
+  font-size: 2rem;
+}
+
+.carrusel-texto p {
+  max-width: 460px;
+  margin: 0;
+  font-size: 1.02rem;
+  opacity: 0.95;
+}
+
+/* ---------- Puntos de control ---------- */
+
+.carrusel-puntos {
+  position: absolute;
+  bottom: 38px;
+  left: 40px;
+  z-index: 3;
+  display: flex;
+  gap: 10px;
+}
+
+.carrusel-punto {
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+}
+
+.carrusel-punto:hover {
+  background-color: rgba(255, 255, 255, 0.75);
+}
+
+.carrusel-punto.activo {
+  width: 28px;
+  border-radius: 6px;
+  background-color: var(--blanco);
+}
+
+/* ---------- Panel del formulario ---------- */
+
+.auth-formulario {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  background-color: var(--verde-50);
+}
+
+.auth-tarjeta {
+  width: 100%;
+  max-width: 420px;
+  padding: 32px;
+  background-color: var(--blanco);
+  border: 1px solid var(--borde);
+  border-radius: 16px;
+  box-shadow: var(--sombra);
+}
+
+.auth-tarjeta h1 {
+  font-size: 1.6rem;
+}
+
+.auth-subtitulo {
+  margin: 0 0 24px;
+  color: var(--texto-suave);
+  font-size: 0.95rem;
+}
+
+.auth-pie {
+  margin: 20px 0 0;
+  text-align: center;
+  font-size: 0.92rem;
+  color: var(--texto-suave);
+}
+
+/* Marca visible solo cuando el panel de la fotografia no muestra la suya */
+.auth-marca-movil {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  color: var(--verde-700);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+/* ---------- Pantallas medianas ---------- */
+
+@media (max-width: 1100px) {
+  .carrusel-texto h2 {
+    font-size: 1.6rem;
+  }
+
+  .carrusel-texto p {
+    font-size: 0.95rem;
+  }
+}
+
+/* ---------- Moviles: la fotografia pasa arriba ---------- */
+
+@media (max-width: 860px) {
+  .auth {
+    flex-direction: column;
+  }
+
+  .auth-presentacion {
+    flex: none;
+    height: 210px;
+  }
+
+  .auth-marca {
+    top: 20px;
+    left: 20px;
+  }
+
+  .auth-marca span {
+    font-size: 1.25rem;
+  }
+
+  /* En una banda tan baja el parrafo no cabe: se deja solo el titulo. */
+  .carrusel-texto {
+    padding: 20px 20px 46px;
+  }
+
+  .carrusel-texto h2 {
+    font-size: 1.25rem;
+    margin-bottom: 0;
+  }
+
+  .carrusel-texto p {
+    display: none;
+  }
+
+  .carrusel-puntos {
+    bottom: 18px;
+    left: 20px;
+  }
+
+  .auth-formulario {
+    padding: 24px 16px 40px;
+  }
+
+  .auth-tarjeta {
+    padding: 24px;
+  }
+}
+
+/* Respeta la preferencia del sistema de reducir animaciones */
+@media (prefers-reduced-motion: reduce) {
+  .carrusel-escena {
+    transition: none;
+  }
+}
+
+/* El registro de veterinario pide mas datos: la tarjeta se ensancha
+   para que el formulario no quede en una columna estrecha. */
+.auth-tarjeta-ancha {
+  max-width: 580px;
+}
