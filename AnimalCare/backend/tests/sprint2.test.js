@@ -978,6 +978,23 @@ describe("Mejora: resenas despues de una cita atendida", () => {
 
 // ======================= Sprint 3: historias clinicas =======================
 
+// Cita ya empezada (en curso) del veterinario con una mascota: de ahi sale cada entrada.
+// Por defecto queda COMPLETED para no ocupar la agenda en las pruebas de urgencias (que dependen de la hora actual).
+async function citaEnCurso(petId, estado = "COMPLETED", clienteEmail = ctx.emails.clienteA) {
+  const cliente = await prisma.user.findUnique({ where: { email: clienteEmail } });
+  return prisma.appointment.create({
+    data: {
+      mode: "CLINIC",
+      scheduledAt: new Date(Date.now() - 10 * 60 * 1000),
+      durationMinutes: 30,
+      status: estado,
+      clientId: cliente.id,
+      vetProfileId: ctx.vetProfileId,
+      petId,
+    },
+  });
+}
+
 describe("AN-18: crear historia clinica", () => {
   test("un veterinario sin citas con la mascota no puede verla ni escribir en ella", async () => {
     const rocky = await http("POST", "/pets", {
@@ -990,7 +1007,7 @@ describe("AN-18: crear historia clinica", () => {
     assert.equal((await http("GET", `/medical-records/pets/${ctx.rocky}`, { token: ctx.vet })).status, 404);
     const r = await http("POST", "/medical-records", {
       token: ctx.vet,
-      body: { petId: ctx.rocky, reason: "Control", diagnosis: "Sano" },
+      body: { petId: ctx.rocky, appointmentId: ctx.citaResena, reason: "Control", diagnosis: "Sano" },
     });
     assert.equal(r.status, 404);
   });
@@ -998,15 +1015,16 @@ describe("AN-18: crear historia clinica", () => {
   test("valida los campos obligatorios y los rangos", async () => {
     const vacio = await http("POST", "/medical-records", { token: ctx.vet, body: { petId: ctx.mascota } });
     assert.equal(vacio.status, 400);
-    assert.equal(vacio.data.errors.length, 2);
+    assert.equal(vacio.data.errors.length, 3, "motivo, diagnostico y cita");
+    const cita = await citaEnCurso(ctx.mascota);
     const fiebre = await http("POST", "/medical-records", {
       token: ctx.vet,
-      body: { petId: ctx.mascota, reason: "Fiebre", diagnosis: "x", temperature: "50" },
+      body: { petId: ctx.mascota, appointmentId: cita.id, reason: "Fiebre", diagnosis: "x", temperature: "50" },
     });
     assert.equal(fiebre.status, 400);
     const futura = await http("POST", "/medical-records", {
       token: ctx.vet,
-      body: { petId: ctx.mascota, reason: "x", diagnosis: "x", visitDate: "2099-01-01" },
+      body: { petId: ctx.mascota, appointmentId: cita.id, reason: "x", diagnosis: "x", visitDate: "2099-01-01" },
     });
     assert.equal(futura.status, 400);
   });
@@ -1049,13 +1067,44 @@ describe("AN-18: crear historia clinica", () => {
     assert.equal(r.status, 409);
   });
 
-  test("tambien se puede registrar una entrada sin cita asociada", async () => {
+  test("toda entrada pertenece a una cita: sin cita no se registra", async () => {
     const r = await http("POST", "/medical-records", {
       token: ctx.vet,
       body: { petId: ctx.mascota, reason: "Llamada de seguimiento", diagnosis: "Evoluciona bien" },
     });
+    assert.equal(r.status, 400);
+    assert.match(r.data.errors.join(" "), /debe pertenecer a una cita/);
+  });
+
+  test("la consulta se registra mientras la cita esta en curso, sin esperar a que termine", async () => {
+    const cita = await citaEnCurso(ctx.mascota, "CONFIRMED");
+    const r = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, appointmentId: cita.id, reason: "Control en consulta", diagnosis: "Evoluciona bien" },
+    });
     assert.equal(r.status, 201, errores(r));
+    assert.equal(r.data.record.appointmentId, cita.id);
     ctx.entrada2 = r.data.record.id;
+    await prisma.appointment.update({ where: { id: cita.id }, data: { status: "COMPLETED" } }); // libera la agenda
+
+    // Una cita que todavia no empieza no admite la entrada.
+    const futura = await prisma.appointment.create({
+      data: {
+        mode: "CLINIC",
+        scheduledAt: new Date(Date.now() + 3 * 60 * 60 * 1000),
+        durationMinutes: 30,
+        status: "CONFIRMED",
+        clientId: cita.clientId,
+        vetProfileId: ctx.vetProfileId,
+        petId: ctx.mascota,
+      },
+    });
+    const antes = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, appointmentId: futura.id, reason: "x", diagnosis: "x" },
+    });
+    assert.equal(antes.status, 409);
+    assert.match(antes.data.message, /aún no ha empezado/);
   });
 
   test("un cliente no puede escribir en la historia", async () => {
@@ -1287,9 +1336,10 @@ describe("Adjuntos de la historia clinica (extiende AN-18 y AN-21)", () => {
   });
 
   test("al eliminar la entrada, el dueño deja de ver sus archivos y no se pueden agregar mas", async () => {
+    const citaExamenes = await citaEnCurso(ctx.mascota);
     const nueva = await http("POST", "/medical-records", {
       token: ctx.vet,
-      body: { petId: ctx.mascota, reason: "Control con examenes", diagnosis: "En revision" },
+      body: { petId: ctx.mascota, appointmentId: citaExamenes.id, reason: "Control con examenes", diagnosis: "En revision" },
     });
     assert.equal(nueva.status, 201, errores(nueva));
     const adj = await http("POST", `/medical-records/${nueva.data.record.id}/attachments`, {

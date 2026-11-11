@@ -194,8 +194,8 @@ async function getPetHistory(req, res) {
       orderBy: [{ visitDate: "desc" }, { createdAt: "desc" }],
     });
 
-    // Para el veterinario: citas suyas con esta mascota que ya pasaron y aun
-    // no tienen entrada, para registrarlas con un clic.
+    // Para el veterinario: citas suyas con esta mascota que ya empezaron (o pasaron)
+    // y aun no tienen entrada. Es de donde sale cada entrada nueva.
     let pendingAppointments;
     if (paraVeterinario) {
       const citas = await prisma.appointment.findMany({
@@ -239,8 +239,11 @@ async function createRecord(req, res) {
 
     const { errors, value } = validateRecord(body);
 
+    // Cada entrada nace de una cita: se registra durante la consulta o despues.
     let appointment = null;
-    if (body.appointmentId !== undefined && body.appointmentId !== null && String(body.appointmentId) !== "") {
+    if (body.appointmentId === undefined || body.appointmentId === null || String(body.appointmentId) === "") {
+      errors.push("La entrada debe pertenecer a una cita: registra la consulta desde la cita de tu agenda.");
+    } else {
       const appointmentId = parseId(body.appointmentId);
       if (!appointmentId) errors.push("El identificador de la cita no es valido.");
       else {
@@ -259,24 +262,22 @@ async function createRecord(req, res) {
       return res.status(409).json({ message: "La mascota fue retirada por su dueño; no se pueden agregar entradas." });
     }
 
-    if (body.appointmentId !== undefined && body.appointmentId !== null && String(body.appointmentId) !== "") {
-      if (!appointment || appointment.vetProfileId !== vetProfileId || appointment.petId !== petId) {
-        return res.status(404).json({ message: "La cita no existe o no corresponde a esta mascota." });
-      }
-      if (appointment.status === "CANCELLED") {
-        return res.status(409).json({ message: "No se puede registrar una cita cancelada." });
-      }
-      if (appointment.scheduledAt.getTime() > Date.now()) {
-        return res.status(409).json({ message: "La cita aún no ha ocurrido." });
-      }
-      if (appointment.medicalRecord) {
-        return res.status(409).json({ message: "Esta cita ya tiene una entrada en la historia clínica." });
-      }
+    if (!appointment || appointment.vetProfileId !== vetProfileId || appointment.petId !== petId) {
+      return res.status(404).json({ message: "La cita no existe o no corresponde a esta mascota." });
+    }
+    if (appointment.status === "CANCELLED") {
+      return res.status(409).json({ message: "No se puede registrar una cita cancelada." });
+    }
+    if (appointment.scheduledAt.getTime() > Date.now()) {
+      return res.status(409).json({ message: "La cita aún no ha empezado: podrás registrarla cuando comience." });
+    }
+    if (appointment.medicalRecord) {
+      return res.status(409).json({ message: "Esta cita ya tiene una entrada en la historia clínica." });
     }
 
     // Fecha: la indicada, la de la cita o hoy.
     const visitDate =
-      value.visitDate || (appointment ? startOfDay(appointment.scheduledAt) : startOfDay());
+      value.visitDate || startOfDay(appointment.scheduledAt);
 
     const campos = { ...value };
     delete campos.visitDate;
@@ -284,7 +285,7 @@ async function createRecord(req, res) {
     try {
       record = await prisma.$transaction(async (tx) => {
         const creado = await tx.medicalRecord.create({
-          data: { ...campos, visitDate, petId, vetProfileId, appointmentId: appointment ? appointment.id : null },
+          data: { ...campos, visitDate, petId, vetProfileId, appointmentId: appointment.id },
           include: RECORD_INCLUDE,
         });
         // El peso medido en consulta pasa a ser el peso actual de la mascota.

@@ -405,7 +405,7 @@ maquina.
 | PATCH  | /api/appointments/:id/complete | Si | VETERINARIAN | Marca como atendida una cita cuya hora ya llego (AN-16) |
 | POST   | /api/appointments/:id/review | Si  | CLIENT   | Califica una cita atendida `{ rating: 1-5, comment? }` |
 | GET    | /api/medical-records/pets/:petId | Si | CLIENT, VETERINARIAN | Historia clinica de una mascota (AN-21) |
-| POST   | /api/medical-records     | Si      | VETERINARIAN | Crea una entrada (AN-18)                     |
+| POST   | /api/medical-records     | Si      | VETERINARIAN | Crea la entrada de una cita en curso o pasada, `appointmentId` obligatorio (AN-18) |
 | PUT    | /api/medical-records/:id | Si      | VETERINARIAN | Modifica una entrada propia (AN-20)          |
 | PATCH  | /api/medical-records/:id/annul | Si | VETERINARIAN | Elimina (anula) una entrada propia `{ reason }` (AN-19) |
 | POST   | /api/medical-records/:id/attachments | Si | VETERINARIAN | Adjunta un archivo a una entrada propia `{ file: dataURL, name? }` (PDF, JPG o PNG, max. 5 MB) |

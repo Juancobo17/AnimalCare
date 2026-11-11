@@ -183,7 +183,7 @@ La historia clínica de una mascota es la lista de sus entradas, una por consult
 
 * **Escenario 1: Registrar una consulta atendida**
   * **Dado que** el veterinario atendió una cita con una mascota,
-  * **Cuando** presiona "Registrar en historia clínica" desde su agenda, completa motivo y diagnóstico (obligatorios) y, si aplica, tratamiento, peso, temperatura, vacunas y observaciones,
+  * **Cuando** presiona "Registrar consulta en la historia" desde su agenda, mientras la cita está en curso o después, completa motivo y diagnóstico (obligatorios) y, si aplica, tratamiento, peso, temperatura, vacunas y observaciones,
   * **Entonces** el sistema guarda la entrada con la fecha de la cita, actualiza el peso de la mascota si lo registró y notifica al dueño.
 * **Escenario 2: Campos obligatorios y rangos**
   * **Dado que** el veterinario está creando una entrada,
