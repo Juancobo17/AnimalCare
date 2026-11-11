@@ -1,6 +1,8 @@
 // AN-31: horario base semanal y bloqueos excepcionales de la agenda.
 import { useEffect, useState } from "react";
 
+import { usarTitulo } from "../hooks/usarTitulo";
+import Icono from "../components/Icono";
 import Cabecera from "../components/Cabecera";
 import Alerta from "../components/Alerta";
 import {
@@ -104,7 +106,13 @@ function HorarioSemanal() {
       <Alerta tipo="exito" mensajes={exito} />
       <Alerta tipo="error" mensajes={errores} />
 
-      {!porDia && <p className="texto-suave">Cargando horario...</p>}
+      {!porDia && (
+        <div className="semana" aria-busy="true" aria-label="Cargando horario">
+          {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+            <div key={n} className="esqueleto" style={{ height: 52, marginBottom: 8 }} />
+          ))}
+        </div>
+      )}
 
       {porDia && (
         <>
@@ -146,9 +154,10 @@ function HorarioSemanal() {
                           type="button"
                           className="boton-icono"
                           aria-label={`Quitar franja ${f.startTime} a ${f.endTime}`}
+                          title="Quitar franja"
                           onClick={() => cambiarDia(dia, franjas.filter((_, j) => j !== i))}
                         >
-                          ×
+                          <Icono nombre="cerrar" tamano={16} grosor={2.2} />
                         </button>
                       </div>
                     ))}
@@ -374,10 +383,11 @@ function Bloqueos() {
 }
 
 function MiHorario() {
+  usarTitulo("Mi horario");
   return (
     <div className="pagina">
       <Cabecera />
-      <main className="contenedor">
+      <main className="contenedor contenedor-medio">
         <div className="tarjeta">
           <h1>Mi horario</h1>
           <p className="texto-suave">Configura cuándo atiendes y bloquea los días que no estarás.</p>

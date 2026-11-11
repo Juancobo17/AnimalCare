@@ -2,6 +2,9 @@
 // AN-28 agregar, AN-29 eliminar, AN-30 asignar y modificar precios.
 import { useEffect, useState } from "react";
 
+import Selector from "../components/Selector";
+import { usarTitulo } from "../hooks/usarTitulo";
+import Icono from "../components/Icono";
 import Cabecera from "../components/Cabecera";
 import Alerta from "../components/Alerta";
 import {
@@ -103,7 +106,7 @@ function FormularioServicio({ inicial, textoBoton, onGuardar, onCancelar }) {
             <label htmlFor={`duracion-${textoBoton}`}>
               Duración <span className="obligatorio">*</span>
             </label>
-            <select
+            <Selector
               id={`duracion-${textoBoton}`}
               name="durationMinutes"
               value={datos.durationMinutes}
@@ -114,7 +117,7 @@ function FormularioServicio({ inicial, textoBoton, onGuardar, onCancelar }) {
                   {minutos} min
                 </option>
               ))}
-            </select>
+            </Selector>
           </div>
         </div>
       </div>
@@ -143,6 +146,7 @@ function FormularioServicio({ inicial, textoBoton, onGuardar, onCancelar }) {
 }
 
 function MisServicios() {
+  usarTitulo("Mis servicios");
   const [servicios, setServicios] = useState([]);
   const [visible, setVisible] = useState(true);
   const [cargando, setCargando] = useState(true);
@@ -228,97 +232,128 @@ function MisServicios() {
           onReintentar={sinConexion ? () => setIntento((n) => n + 1) : undefined}
         />
 
-        <div className="tarjeta">
-          <h3>Servicios publicados</h3>
+        <div className="servicios-cols">
+          <section className="tarjeta">
+            <div className="encabezado-seccion">
+              <h3>Servicios publicados</h3>
+              {!cargando && servicios.length > 0 && (
+                <span className="texto-suave">
+                  {servicios.length} {servicios.length === 1 ? "servicio" : "servicios"}
+                </span>
+              )}
+            </div>
 
-          {cargando && <p className="texto-suave">Cargando servicios...</p>}
+            {cargando && (
+              <div className="servicios-lista" aria-busy="true" aria-label="Cargando servicios">
+                <div className="esqueleto" style={{ height: 72 }} />
+                <div className="esqueleto" style={{ height: 72 }} />
+              </div>
+            )}
 
-          {!cargando && servicios.length === 0 && errores.length === 0 && (
-            <p className="texto-suave">Aún no has agregado servicios.</p>
-          )}
+            {!cargando && servicios.length === 0 && errores.length === 0 && (
+              <div className="estado-vacio estado-vacio-compacto">
+                <span className="estado-vacio-icono">
+                  <Icono nombre="lista" tamano={26} />
+                </span>
+                <div>
+                  <h2>Aún no has agregado servicios</h2>
+                  <p className="texto-suave">Agrega el primero con el formulario y aparecerá aquí.</p>
+                </div>
+              </div>
+            )}
 
-          <ul className="lista-servicios">
-            {servicios.map((servicio) => (
-              <li key={servicio.id} className="servicio-gestion">
-                {editando === servicio.id ? (
-                  <FormularioServicio
-                    inicial={{
-                      name: servicio.name,
-                      price: String(servicio.price),
-                      durationMinutes: String(servicio.durationMinutes),
-                      description: servicio.description || "",
-                    }}
-                    textoBoton="Guardar cambios"
-                    onGuardar={(datos) => manejarEditar(servicio.id, datos)}
-                    onCancelar={() => setEditando(null)}
-                  />
-                ) : (
-                  <>
-                    <div>
-                      <strong>{servicio.name}</strong>
-                      <span className="texto-suave"> · {servicio.durationMinutes} min</span>
-                      {servicio.description && <p className="texto-suave">{servicio.description}</p>}
-                    </div>
-                    <div className="servicio-gestion-acciones">
-                      <span className="precio">{formatearPrecio(servicio.price)}</span>
+            <ul className="servicios-lista">
+              {servicios.map((servicio) => (
+                <li key={servicio.id} className="servicio-item">
+                  {editando === servicio.id ? (
+                    <FormularioServicio
+                      inicial={{
+                        name: servicio.name,
+                        price: String(servicio.price),
+                        durationMinutes: String(servicio.durationMinutes),
+                        description: servicio.description || "",
+                      }}
+                      textoBoton="Guardar cambios"
+                      onGuardar={(datos) => manejarEditar(servicio.id, datos)}
+                      onCancelar={() => setEditando(null)}
+                    />
+                  ) : (
+                    <>
+                      <div className="servicio-info">
+                        <strong>{servicio.name}</strong>
+                        <span className="servicio-duracion">
+                          <Icono nombre="reloj" tamano={14} grosor={2} />
+                          {servicio.durationMinutes} min
+                        </span>
+                        {servicio.description && <p className="texto-suave">{servicio.description}</p>}
+                      </div>
+
+                      <span className="servicio-precio">{formatearPrecio(servicio.price)}</span>
+
                       {eliminando === servicio.id ? (
-                        <div className="cita-confirmacion acciones-linea" role="alertdialog">
+                        <div className="servicio-confirmar" role="alertdialog" aria-label="Eliminar servicio">
                           <span>¿Eliminar este servicio?</span>
-                          <button
-                            type="button"
-                            className="boton boton-peligro boton-auto"
-                            onClick={() => confirmarEliminar(servicio.id)}
-                          >
-                            Sí, eliminar
-                          </button>
-                          <button
-                            type="button"
-                            className="boton boton-secundario boton-auto"
-                            onClick={() => setEliminando(null)}
-                          >
-                            No
-                          </button>
+                          <div className="acciones-linea">
+                            <button
+                              type="button"
+                              className="boton boton-peligro boton-auto"
+                              onClick={() => confirmarEliminar(servicio.id)}
+                            >
+                              Sí, eliminar
+                            </button>
+                            <button
+                              type="button"
+                              className="boton boton-secundario boton-auto"
+                              onClick={() => setEliminando(null)}
+                            >
+                              No
+                            </button>
+                          </div>
                         </div>
                       ) : (
-                        <div className="acciones-linea">
+                        <div className="servicio-acciones">
                           <button
                             type="button"
-                            className="boton boton-secundario boton-auto"
+                            className="boton boton-secundario boton-auto boton-cuadrado"
+                            aria-label={`Editar ${servicio.name}`}
+                            title="Editar"
                             onClick={() => {
                               setEditando(servicio.id);
                               setEliminando(null);
                             }}
                           >
-                            Editar
+                            <Icono nombre="editar" tamano={18} />
                           </button>
                           <button
                             type="button"
-                            className="boton boton-peligro boton-auto"
+                            className="boton boton-peligro boton-auto boton-cuadrado"
+                            aria-label={`Eliminar ${servicio.name}`}
+                            title="Eliminar"
                             onClick={() => {
                               setEliminando(servicio.id);
                               setEditando(null);
                             }}
                           >
-                            Eliminar
+                            <Icono nombre="papelera" tamano={18} />
                           </button>
                         </div>
                       )}
-                    </div>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
 
-        <div className="tarjeta">
-          <h3>Agregar servicio</h3>
-          <FormularioServicio
-            key={claveFormulario}
-            inicial={SERVICIO_VACIO}
-            textoBoton="Agregar servicio"
-            onGuardar={manejarAgregar}
-          />
+          <aside className="tarjeta servicios-nuevo">
+            <h3>Agregar servicio</h3>
+            <FormularioServicio
+              key={claveFormulario}
+              inicial={SERVICIO_VACIO}
+              textoBoton="Agregar servicio"
+              onGuardar={manejarAgregar}
+            />
+          </aside>
         </div>
       </main>
     </div>

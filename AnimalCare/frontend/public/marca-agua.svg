@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Huella grande y tenue que se usa como marca de agua decorativa. -->
+  <g fill="#258355" fill-opacity="0.12">
+    <ellipse cx="10.5" cy="25" rx="5" ry="6.8" transform="rotate(-24 10.5 25)"/>
+    <ellipse cx="23.5" cy="13.5" rx="5.5" ry="7.4" transform="rotate(-8 23.5 13.5)"/>
+    <ellipse cx="40.5" cy="13.5" rx="5.5" ry="7.4" transform="rotate(8 40.5 13.5)"/>
+    <ellipse cx="53.5" cy="25" rx="5" ry="6.8" transform="rotate(24 53.5 25)"/>
+    <path d="M32 59C20.5 51.5 15 45.5 15 39.2 15 33.6 19.3 30 24 30c3.4 0 6.2 1.8 8 4.4 1.8-2.6 4.6-4.4 8-4.4 4.7 0 9 3.6 9 9.2 0 6.3-5.5 12.3-17 19.8z"/>
+  </g>
+</svg>

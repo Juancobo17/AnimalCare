@@ -26,7 +26,8 @@ test("registro de cliente con consentimiento (AN-6)", async ({ page }) => {
 
   await page.getByRole("checkbox", { name: /política de privacidad/ }).check();
   await page.getByRole("button", { name: "Crear cuenta" }).click();
-  await expect(page.getByRole("alert")).toContainText("Tu cuenta fue creada");
+  // El aviso de exito es un toast (aviso emergente), no un cuadro role="alert".
+  await expect(page.getByText("Tu cuenta fue creada")).toBeVisible();
   await expect(page).toHaveURL(/\/login$/, { timeout: 10_000 });
 });
 
@@ -49,7 +50,9 @@ test("inicio de sesion, mascota, buscador y cierre de sesion", async ({ page }) 
   // Mascota.
   await page.goto("/mascotas");
   await page.getByLabel(/^Nombre/).fill("Luna");
-  await page.getByLabel(/Especie/).selectOption("Gato");
+  // La lista de especies es un selector propio (combobox), no un <select> nativo.
+  await page.getByLabel(/Especie/).click();
+  await page.getByRole("option", { name: "Gato" }).click();
   await page.getByLabel(/Nacimiento/).fill("2022-04-10");
   await page.getByRole("button", { name: "Registrar mascota" }).click();
   await expect(page.getByRole("heading", { name: "Luna" })).toBeVisible();

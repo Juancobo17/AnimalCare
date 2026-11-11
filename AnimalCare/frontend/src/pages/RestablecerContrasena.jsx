@@ -2,12 +2,14 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
+import { usarTitulo } from "../hooks/usarTitulo";
 import AuthLayout from "../components/AuthLayout";
 import Alerta from "../components/Alerta";
 import { restablecerContrasena, contrasenaValida, MENSAJE_CONTRASENA } from "../services/account.service";
 import { obtenerMensajesDeError } from "../services/api";
 
 function RestablecerContrasena() {
+  usarTitulo("Nueva contraseña");
   const [parametros] = useSearchParams();
   const navigate = useNavigate();
   const token = parametros.get("token") || "";

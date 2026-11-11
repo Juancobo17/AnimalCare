@@ -1,0 +1,234 @@
+/* ==========================================================
+   AnimalCare - Agendar cita: pasos guiados con resumen lateral
+   ========================================================== */
+
+.agendar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 19rem;
+  gap: 20px;
+  align-items: start;
+}
+
+.agendar .tarjeta {
+  margin-bottom: 0;
+}
+
+.agendar-principal h1 {
+  margin-bottom: 4px;
+}
+
+/* ---------- Indicador de progreso ---------- */
+
+.pasos {
+  display: flex;
+  margin: 22px 0 26px;
+  padding: 0;
+  list-style: none;
+}
+
+.paso {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  text-align: center;
+}
+
+/* Linea que une cada paso con el anterior. */
+.paso + .paso::before {
+  content: "";
+  position: absolute;
+  top: 17px;
+  right: 50%;
+  left: -50%;
+  height: 2px;
+  background-color: var(--borde);
+}
+
+.paso-completado + .paso::before {
+  background-color: var(--verde-500);
+}
+
+.paso-marca {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--texto-suave);
+  background-color: var(--superficie);
+  border: 2px solid var(--borde);
+  border-radius: 50%;
+}
+
+.paso-actual .paso-marca {
+  color: var(--blanco);
+  background-color: var(--verde-600);
+  border-color: var(--verde-600);
+  box-shadow: 0 0 0 4px rgba(47, 158, 104, 0.2);
+}
+
+.paso-completado .paso-marca {
+  color: var(--verde-700);
+  background-color: var(--verde-tinte-2);
+  border-color: var(--verde-500);
+}
+
+button.paso-marca {
+  cursor: pointer;
+}
+
+button.paso-marca:hover {
+  background-color: var(--verde-100);
+}
+
+.paso-nombre {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+}
+
+.paso-actual .paso-nombre,
+.paso-completado .paso-nombre {
+  color: var(--tinta);
+}
+
+/* ---------- Titulo y botones de cada paso ---------- */
+
+.paso-titulo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 18px;
+  font-size: 1.2rem;
+}
+
+.paso-titulo:focus {
+  outline: none;
+}
+
+.paso-contador {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--verde-600);
+}
+
+.paso-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--borde);
+}
+
+/* ---------- Resumen lateral ---------- */
+
+.agendar-resumen {
+  position: sticky;
+  top: 5.5rem;
+  padding: 20px;
+}
+
+.agendar-vet {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.agendar-vet > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.92rem;
+}
+
+.agendar-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.agendar-datos dt {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texto-suave);
+}
+
+.agendar-datos dd {
+  margin: 1px 0 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--tinta);
+}
+
+.agendar-datos dd.pendiente {
+  font-weight: 400;
+  color: var(--texto-suave);
+}
+
+.agendar-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--borde);
+  font-size: 0.88rem;
+  color: var(--texto-suave);
+}
+
+.agendar-total strong {
+  font-size: 1.05rem;
+  color: var(--verde-700);
+  text-align: right;
+}
+
+/* En pantallas angostas el resumen sobra: el paso 4 ya trae la revision. */
+@media (max-width: 960px) {
+  .agendar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agendar-resumen {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .pasos {
+    margin-bottom: 40px;
+  }
+
+  /* Solo se escribe el nombre del paso actual para que todo quepa. */
+  .paso-nombre {
+    display: none;
+  }
+
+  .paso-actual .paso-nombre {
+    position: absolute;
+    top: 42px;
+    display: block;
+    white-space: nowrap;
+  }
+
+  .paso-acciones .boton {
+    flex: 1 1 0;
+  }
+}

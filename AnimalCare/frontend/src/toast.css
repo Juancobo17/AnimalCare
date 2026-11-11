@@ -1,0 +1,111 @@
+/* ==========================================================
+   AnimalCare - Toast: avisos emergentes
+   Aparecen abajo a la derecha (abajo y a todo el ancho en moviles).
+   ========================================================== */
+
+.toasts {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  width: min(26rem, calc(100vw - 32px));
+  /* El contenedor no bloquea clics: solo cada aviso los recibe. */
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 12px 12px 14px;
+  color: var(--texto);
+  background-color: var(--superficie);
+  border: 1px solid var(--exito-borde);
+  border-radius: 12px;
+  box-shadow: var(--sombra-elevada), 0 12px 32px rgba(23, 37, 29, 0.14);
+  pointer-events: auto;
+  animation: toast-entra 0.25s ease-out;
+}
+
+.toast-error {
+  border-color: var(--error-borde);
+}
+
+.toast-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  height: 28px;
+  color: var(--verde-700);
+  background-color: var(--verde-tinte-2);
+  border-radius: 50%;
+}
+
+.toast-error .toast-icono {
+  color: var(--error-texto);
+  background-color: var(--error-fondo);
+}
+
+.toast-texto {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding-top: 3px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.toast-cerrar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  height: 28px;
+  padding: 0;
+  color: var(--texto-suave);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.toast-cerrar:hover {
+  color: var(--texto);
+  background-color: var(--gris-hover);
+}
+
+@keyframes toast-entra {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .toasts {
+    right: 16px;
+    bottom: 16px;
+    left: 16px;
+    width: auto;
+    align-items: stretch;
+  }
+}
+
+/* Al imprimir no se muestran avisos. */
+@media print {
+  .toasts {
+    display: none;
+  }
+}
