@@ -1415,3 +1415,130 @@
   margin-left: auto;
   color: var(--error-texto);
 }
+
+/* ---------- Urgencias ---------- */
+
+.alerta-urgencia {
+  padding: 14px 16px;
+  margin-top: 12px;
+  font-size: 0.93rem;
+  line-height: 1.5;
+  color: var(--error-texto);
+  background-color: var(--error-fondo);
+  border: 1px solid var(--error-borde);
+  border-radius: var(--radio);
+}
+
+.urgencia-sin-turno {
+  padding: 10px 12px;
+  color: var(--error-texto);
+  background-color: var(--error-fondo);
+  border: 1px solid var(--error-borde);
+  border-radius: var(--radio);
+}
+
+.boton-peligro-solido {
+  color: #fff;
+  background-color: #c0392b;
+  border-color: #c0392b;
+}
+
+.boton-peligro-solido:hover:not(:disabled) {
+  background-color: #a5281b;
+}
+
+.urgencia-estado {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.urgencia-estado h3 {
+  margin: 0 0 6px;
+}
+
+.urgencia-estado p {
+  margin: 4px 0;
+}
+
+.urgencia-buscando {
+  border-left: 5px solid #e0a100;
+}
+
+.urgencia-aceptada {
+  border-left: 5px solid var(--verde-600);
+}
+
+.pulso {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  margin-top: 6px;
+  background-color: #e0a100;
+  border-radius: 50%;
+  animation: urgencia-pulso 1.4s ease-in-out infinite;
+}
+
+@keyframes urgencia-pulso {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(224, 161, 0, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(224, 161, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulso {
+    animation: none;
+  }
+}
+
+.urgencia-lista,
+.urgencia-historial {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.urgencia-item,
+.urgencia-historial li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--borde);
+}
+
+.urgencia-item p,
+.urgencia-historial p {
+  margin: 4px 0;
+}
+
+.etiqueta-urgencia-open {
+  color: #8a5a00;
+  background-color: #fff6e5;
+  border-color: #f5dcae;
+}
+
+.etiqueta-urgencia-accepted {
+  color: var(--verde-700);
+  background-color: var(--verde-50);
+  border-color: var(--verde-200);
+}
+
+.etiqueta-urgencia-completed {
+  color: var(--verde-700);
+  background-color: var(--verde-100);
+  border-color: var(--verde-200);
+}
+
+.etiqueta-urgencia-cancelled,
+.etiqueta-urgencia-expired {
+  color: var(--texto-suave);
+  background-color: #f1f4f2;
+  border-color: var(--borde);
+}

@@ -95,6 +95,9 @@ model User {
 
   // Resenas que dejo como cliente despues de una cita atendida
   reviews Review[]
+
+  // Urgencias que pidio como cliente
+  emergencies EmergencyRequest[] @relation("ClientEmergencies")
 }
 
 model Pet {
@@ -118,23 +121,28 @@ model Pet {
   // Historia clinica: una entrada por consulta (AN-18 a AN-21)
   medicalRecords MedicalRecord[]
 
+  // Urgencias en las que se uso esta mascota
+  emergencies EmergencyRequest[]
+
   @@index([userId])
 }
 
 // Datos profesionales del veterinario (AN-7 y AN-26).
 // Se crea en la misma transaccion que el usuario al registrarse.
 model VetProfile {
-  id             Int      @id @default(autoincrement())
-  license        String   @unique // numero de matricula profesional
+  id             Int       @id @default(autoincrement())
+  license        String    @unique // numero de matricula profesional
   specialty      String
-  bio            String?  @db.Text
+  bio            String?   @db.Text
   // Foto de perfil (enlace a la imagen). Si no hay, el frontend muestra las iniciales.
   photoUrl       String?
   // Calificacion promedio de 0.0 a 5.0. null mientras no existan calificaciones.
-  rating         Decimal? @db.Decimal(2, 1)
+  rating         Decimal?  @db.Decimal(2, 1)
   phone          String?
   // Direccion del consultorio. Obligatoria si atiende en veterinaria.
   address        String?
+  // De turno para urgencias hasta este momento (null o pasado = fuera de turno).
+  emergencyUntil DateTime?
   // Archivo de la tarjeta profesional que revisa el administrador (privado).
   licenseDocPath String?
 
@@ -154,6 +162,7 @@ model VetProfile {
   blocks         ScheduleBlock[]
   reviews        Review[]
   medicalRecords MedicalRecord[]
+  emergencies    EmergencyRequest[]
 }
 
 // Servicio que ofrece un veterinario (consulta, vacunacion, bano...).
@@ -354,4 +363,46 @@ model AuthToken {
   user   User @relation(fields: [userId], references: [id])
 
   @@index([userId, purpose])
+}
+
+// Estado de una urgencia.
+// OPEN      -> esperando que un veterinario de turno la acepte
+// ACCEPTED  -> un veterinario la tomo
+// COMPLETED -> el veterinario la marco como atendida
+// CANCELLED -> la cancelo el dueño
+// EXPIRED   -> nadie la acepto a tiempo (EMERGENCY_TTL_MIN)
+enum EmergencyStatus {
+  OPEN
+  ACCEPTED
+  COMPLETED
+  CANCELLED
+  EXPIRED
+}
+
+// Solicitud de atencion urgente de un dueño. Se avisa a los veterinarios de
+// turno compatibles con la modalidad y el primero que la acepta se queda con ella.
+model EmergencyRequest {
+  id         Int             @id @default(autoincrement())
+  symptoms   String          @db.Text
+  mode       CareMode
+  address    String? // direccion de la visita si es a domicilio
+  phone      String // telefono de contacto del dueño
+  status     EmergencyStatus @default(OPEN)
+  createdAt  DateTime        @default(now())
+  acceptedAt DateTime?
+  closedAt   DateTime?
+
+  clientId Int
+  client   User @relation("ClientEmergencies", fields: [clientId], references: [id])
+
+  petId Int?
+  pet   Pet? @relation(fields: [petId], references: [id])
+
+  // Veterinario que la acepto (null mientras esta abierta).
+  vetProfileId Int?
+  vetProfile   VetProfile? @relation(fields: [vetProfileId], references: [id])
+
+  @@index([status, createdAt])
+  @@index([clientId])
+  @@index([vetProfileId, status])
 }

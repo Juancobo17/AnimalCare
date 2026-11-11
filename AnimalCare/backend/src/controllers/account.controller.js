@@ -237,6 +237,17 @@ async function deleteAccount(req, res) {
           data: { userId: otro, message: "Una de tus citas fue cancelada porque la otra persona eliminó su cuenta." },
         });
       }
+      // Urgencias: las del dueño se cancelan; las que atendia el veterinario se reabren.
+      await tx.emergencyRequest.updateMany({
+        where: { clientId: user.id, status: { in: ["OPEN", "ACCEPTED"] } },
+        data: { status: "CANCELLED", closedAt: ahora },
+      });
+      if (user.vetProfile) {
+        await tx.emergencyRequest.updateMany({
+          where: { vetProfileId: user.vetProfile.id, status: "ACCEPTED" },
+          data: { status: "OPEN", vetProfileId: null, acceptedAt: null },
+        });
+      }
       await tx.pet.updateMany({ where: { userId: user.id }, data: { status: "INACTIVE" } });
       await tx.notification.deleteMany({ where: { userId: user.id } });
       await tx.authToken.deleteMany({ where: { userId: user.id } });
@@ -244,7 +255,7 @@ async function deleteAccount(req, res) {
         await tx.service.updateMany({ where: { vetProfileId: user.vetProfile.id }, data: { active: false } });
         await tx.vetProfile.update({
           where: { id: user.vetProfile.id },
-          data: { bio: null, phone: null, photoUrl: null, licenseDocPath: null, address: null },
+          data: { bio: null, phone: null, photoUrl: null, licenseDocPath: null, address: null, emergencyUntil: null },
         });
       }
       await tx.user.update({

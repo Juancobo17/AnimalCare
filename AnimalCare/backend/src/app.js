@@ -13,6 +13,7 @@ const adminRoutes = require("./routes/admin.routes");
 const petRoutes = require("./routes/pet.routes");
 const medicalRecordRoutes = require("./routes/medicalRecord.routes");
 const accountRoutes = require("./routes/account.routes");
+const emergencyRoutes = require("./routes/emergency.routes");
 
 const app = express();
 
@@ -58,6 +59,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/pets", petRoutes);
 app.use("/api/medical-records", medicalRecordRoutes);
 app.use("/api/account", accountRoutes);
+app.use("/api/emergencies", emergencyRoutes);
 
 // Ruta no encontrada
 app.use((req, res) => {

@@ -42,6 +42,9 @@ async function main() {
   await prisma.appointment.deleteMany({
     where: { OR: [{ clientId: { in: userIds } }, { vetProfileId: { in: vetIds } }] },
   });
+  await prisma.emergencyRequest.deleteMany({
+    where: { OR: [{ clientId: { in: userIds } }, { vetProfileId: { in: vetIds } }] },
+  });
   await prisma.pet.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.scheduleBlock.deleteMany({ where: { vetProfileId: { in: vetIds } } });
   await prisma.availability.deleteMany({ where: { vetProfileId: { in: vetIds } } });
