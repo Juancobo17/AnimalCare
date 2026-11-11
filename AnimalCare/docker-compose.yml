@@ -7,6 +7,9 @@ services:
   db:
     image: mysql:8.0
     restart: always
+    # Las migraciones mezclan `User` y `user`; Linux distingue mayusculas.
+    # Solo se aplica al crear el volumen: con uno existente, `docker compose down -v` primero.
+    command: --lower-case-table-names=1
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: animalcare
