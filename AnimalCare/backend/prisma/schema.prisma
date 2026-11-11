@@ -1,0 +1,259 @@
+// Esquema de base de datos de AnimalCare
+// Motor: MySQL  |  ORM: Prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Estado de una mascota.
+// Las mascotas NO se eliminan fisicamente: se desactivan (ACTIVE -> INACTIVE).
+enum PetStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// Tipo de cuenta. Se elige al registrarse (AN-6 cliente, AN-7 veterinario).
+// ADMIN no se puede elegir en el registro: se crea con el script create-admin.
+enum Role {
+  CLIENT
+  VETERINARIAN
+  ADMIN
+}
+
+// Estado de la cuenta (AN-35, AN-37, AN-38).
+// PENDING   -> veterinario recien registrado, esperando que el administrador valide su matricula
+// ACTIVE    -> cuenta habilitada (los clientes nacen ACTIVE)
+// SUSPENDED -> bloqueada por el administrador; no puede usar la plataforma
+// REJECTED  -> registro de veterinario rechazado; no puede usar la plataforma
+enum AccountStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+// Modalidad de atencion de una cita.
+// HOME   -> el veterinario va al domicilio del cliente (AN-10)
+// CLINIC -> el cliente lleva la mascota a la veterinaria (AN-11)
+enum CareMode {
+  HOME
+  CLINIC
+}
+
+// Ciclo de vida de una cita. Al agendarse queda PENDING.
+// Las transiciones posteriores se trabajan en sprints siguientes.
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model User {
+  id        Int           @id @default(autoincrement())
+  name      String
+  email     String        @unique
+  password  String
+  role      Role          @default(CLIENT)
+  status    AccountStatus @default(ACTIVE)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  // Un usuario puede tener muchas mascotas (1:N)
+  pets Pet[]
+
+  // Solo los usuarios con rol VETERINARIAN tienen perfil profesional (1:1)
+  vetProfile VetProfile?
+
+  // Citas que este usuario agendo como cliente
+  appointments Appointment[] @relation("ClientAppointments")
+
+  // Avisos que el sistema le envia (aprobacion de cuenta, citas canceladas...)
+  notifications Notification[]
+
+  // Resenas que dejo como cliente despues de una cita atendida
+  reviews Review[]
+}
+
+model Pet {
+  id        Int       @id @default(autoincrement())
+  name      String
+  species   String
+  sex       String
+  birthDate DateTime
+  weight    Decimal?  @db.Decimal(6, 2)
+  status    PetStatus @default(ACTIVE)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Toda mascota pertenece obligatoriamente a un usuario
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  // Citas a las que se llevo esta mascota
+  appointments Appointment[]
+
+  @@index([userId])
+}
+
+// Datos profesionales del veterinario (AN-7 y AN-26).
+// Se crea en la misma transaccion que el usuario al registrarse.
+model VetProfile {
+  id             Int      @id @default(autoincrement())
+  license        String   @unique // numero de matricula profesional
+  specialty      String
+  bio            String?  @db.Text
+  // Foto de perfil (enlace a la imagen). Si no hay, el frontend muestra las iniciales.
+  photoUrl       String?
+  // Calificacion promedio de 0.0 a 5.0. null mientras no existan calificaciones.
+  rating         Decimal? @db.Decimal(2, 1)
+  phone          String?
+  // Direccion del consultorio. Obligatoria si atiende en veterinaria.
+  address        String?
+  // Archivo de la tarjeta profesional que revisa el administrador (privado).
+  licenseDocPath String?
+
+  // Modalidades que ofrece. Controlan que puede elegir el cliente (AN-10 / AN-11).
+  homeService   Boolean @default(false)
+  clinicService Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id])
+
+  services       Service[]
+  availabilities Availability[]
+  appointments   Appointment[]
+  blocks         ScheduleBlock[]
+  reviews        Review[]
+}
+
+// Servicio que ofrece un veterinario (consulta, vacunacion, bano...).
+// Se muestran en el perfil detallado (AN-26).
+model Service {
+  id              Int      @id @default(autoincrement())
+  name            String
+  description     String?  @db.Text
+  price           Decimal  @db.Decimal(10, 2)
+  durationMinutes Int      @default(30)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  vetProfileId Int
+  vetProfile   VetProfile @relation(fields: [vetProfileId], references: [id])
+
+  appointments Appointment[]
+
+  @@index([vetProfileId])
+}
+
+// Horario semanal de atencion del veterinario.
+// De aqui salen los horarios disponibles que ve el cliente (AN-13).
+model Availability {
+  id        Int      @id @default(autoincrement())
+  weekday   Int // 0 = domingo ... 6 = sabado
+  startTime String // "09:00"
+  endTime   String // "13:00"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  vetProfileId Int
+  vetProfile   VetProfile @relation(fields: [vetProfileId], references: [id])
+
+  @@index([vetProfileId])
+}
+
+// Cita agendada por un cliente con un veterinario (AN-10, AN-11, AN-13).
+model Appointment {
+  id              Int               @id @default(autoincrement())
+  mode            CareMode
+  scheduledAt     DateTime // fecha y hora de inicio
+  durationMinutes Int
+  // Direccion de la visita. Obligatoria cuando la modalidad es HOME.
+  address         String?
+  notes           String?           @db.Text
+  status          AppointmentStatus @default(PENDING)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  clientId Int
+  client   User @relation("ClientAppointments", fields: [clientId], references: [id])
+
+  vetProfileId Int
+  vetProfile   VetProfile @relation(fields: [vetProfileId], references: [id])
+
+  // El servicio es opcional: se puede agendar una consulta general.
+  serviceId Int?
+  service   Service? @relation(fields: [serviceId], references: [id])
+
+  // Mascota que se atiende. Opcional para las citas anteriores a esta funcion.
+  petId Int?
+  pet   Pet? @relation(fields: [petId], references: [id])
+
+  // Momento en que se envio el recordatorio de 24 horas (null = aun no).
+  reminderSentAt DateTime?
+
+  // Resena del cliente, solo despues de que la cita fue atendida.
+  review Review?
+
+  @@index([clientId])
+  @@index([vetProfileId, scheduledAt])
+}
+
+// Bloqueo excepcional de la agenda (AN-31): un dia completo o un rango de
+// horas en que el veterinario no atiende aunque su horario base lo diga.
+// Los horarios que caen dentro de un bloqueo no se ofrecen al cliente.
+model ScheduleBlock {
+  id        Int      @id @default(autoincrement())
+  startsAt  DateTime
+  endsAt    DateTime
+  reason    String?
+  createdAt DateTime @default(now())
+
+  vetProfileId Int
+  vetProfile   VetProfile @relation(fields: [vetProfileId], references: [id])
+
+  @@index([vetProfileId, startsAt])
+}
+
+// Aviso dentro de la plataforma para un usuario (AN-35, AN-37, AN-31).
+// Base del sistema de notificaciones (AN-22, AN-23).
+model Notification {
+  id        Int      @id @default(autoincrement())
+  message   String   @db.Text
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+}
+
+// Resena de una cita atendida. Una por cita. El promedio se guarda en
+// VetProfile.rating para no recalcularlo en cada listado.
+model Review {
+  id        Int      @id @default(autoincrement())
+  rating    Int // 1 a 5
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  appointmentId Int         @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+
+  clientId Int
+  client   User @relation(fields: [clientId], references: [id])
+
+  vetProfileId Int
+  vetProfile   VetProfile @relation(fields: [vetProfileId], references: [id])
+
+  @@index([vetProfileId, createdAt])
+}
