@@ -8,6 +8,16 @@ async function notify(userId, message, db = prisma) {
   return db.notification.create({ data: { userId, message } });
 }
 
+// Mismo aviso para varios usuarios (por ejemplo, a los veterinarios de turno).
+async function notifyMany(userIds, message, db = prisma) {
+  if (userIds.length === 0) {
+    return { count: 0 };
+  }
+  return db.notification.createMany({
+    data: userIds.map((userId) => ({ userId, message })),
+  });
+}
+
 async function findByUser(userId) {
   return prisma.notification.findMany({
     where: { userId },
@@ -48,6 +58,7 @@ function toPublicNotification(notification) {
 
 module.exports = {
   notify,
+  notifyMany,
   findByUser,
   markAsRead,
   markAllAsRead,

@@ -71,6 +71,11 @@ function Cabecera() {
             </NavLink>
           </>
         )}
+        {!esAdministrador && !pendiente && (
+          <NavLink to="/urgencias" className="cabecera-enlace">
+            Urgencias
+          </NavLink>
+        )}
         {esAdministrador && (
           <NavLink to="/admin/usuarios" className="cabecera-enlace">
             Usuarios

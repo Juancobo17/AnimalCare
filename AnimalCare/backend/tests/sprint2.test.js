@@ -102,7 +102,7 @@ function registroVeterinario(email, license, name = NOMBRE_VET) {
 before(async () => {
   // Si el cliente de Prisma no conoce las tablas del Sprint 2, la limpieza
   // final no podria borrar lo que se cree: se detiene antes de empezar.
-  if (!prisma.notification || !prisma.scheduleBlock || !prisma.review || !prisma.medicalRecord || !prisma.medicalAttachment) {
+  if (!prisma.notification || !prisma.scheduleBlock || !prisma.review || !prisma.medicalRecord || !prisma.medicalAttachment || !prisma.emergencyRequest) {
     throw new Error("El cliente de Prisma está desactualizado. Ejecuta `npx prisma generate` y reinicia el backend.");
   }
 
@@ -168,6 +168,9 @@ after(async () => {
     where: { OR: [{ clientId: { in: userIds } }, { vetProfileId: { in: vetIds } }] },
   });
   await prisma.appointment.deleteMany({
+    where: { OR: [{ clientId: { in: userIds } }, { vetProfileId: { in: vetIds } }] },
+  });
+  await prisma.emergencyRequest.deleteMany({
     where: { OR: [{ clientId: { in: userIds } }, { vetProfileId: { in: vetIds } }] },
   });
   await prisma.pet.deleteMany({ where: { userId: { in: userIds } } });
@@ -1631,6 +1634,219 @@ describe("Seguridad: limite de intentos de inicio de sesion", () => {
     const r = await fetch(`${API}/health`);
     assert.equal(r.headers.get("x-content-type-options"), "nosniff");
     assert.equal(r.headers.get("x-frame-options"), "DENY");
+  });
+});
+
+describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
+  const SINTOMAS = "Mi gato vomita sin parar y no quiere moverse";
+  const pedir = (token, extra = {}) =>
+    http("POST", "/emergencies", { token, body: { symptoms: SINTOMAS, mode: "CLINIC", phone: "3001234567", ...extra } });
+  const turno = (token, hours) => http("PUT", "/emergencies/duty", { token, body: { hours } });
+  const accion = (token, id, nombre) => http("PATCH", `/emergencies/${id}/${nombre}`, { token });
+  const mia = (token) => http("GET", "/emergencies/mine", { token });
+  const abiertas = (token) => http("GET", "/emergencies/open", { token });
+
+  test("sin veterinarios de turno se avisa y no se crea la urgencia", async (t) => {
+    const disp = await http("GET", "/emergencies/availability", { token: ctx.clienteA });
+    assert.equal(disp.status, 200);
+    if (disp.data.onDuty !== 0) {
+      t.skip("hay veterinarios reales de turno en esta base");
+      return;
+    }
+    const r = await pedir(ctx.clienteA, { petId: ctx.mascota });
+    assert.equal(r.status, 409);
+    assert.equal(r.data.code, "NO_VETS_ON_DUTY");
+    assert.match(r.data.message, /clínica veterinaria más cercana/);
+  });
+
+  test("valida descripcion, modalidad, direccion, telefono y la mascota", async () => {
+    for (const extra of [{ symptoms: "corto" }, { mode: "VOLANDO" }, { mode: "HOME" }, { phone: "abc" }]) {
+      assert.equal((await pedir(ctx.clienteA, extra)).status, 400, JSON.stringify(extra));
+    }
+    // La mascota de otro cliente no se puede usar.
+    assert.equal((await pedir(ctx.clienteB, { petId: ctx.mascota })).status, 404);
+  });
+
+  test("solo un veterinario aprobado se pone de turno, con horas validas", async () => {
+    const reg = await registroVeterinario(`${PREFIJO}.vet3@test.com`, `QC${RUN}`, `Vet Pendiente ${RUN}`);
+    assert.equal(reg.status, 201, errores(reg));
+    const pendiente = await tokenDe(`${PREFIJO}.vet3@test.com`);
+    assert.equal((await turno(pendiente, 4)).status, 409, "pendiente de aprobacion");
+
+    assert.equal((await turno(ctx.vet, 5)).status, 400);
+    assert.equal((await turno(ctx.vet, "x")).status, 400);
+    assert.equal((await turno(ctx.clienteA, 4)).status, 403, "un cliente no atiende urgencias");
+
+    const ok = await turno(ctx.vet, 8);
+    assert.equal(ok.status, 200, errores(ok));
+    const estado = await http("GET", "/emergencies/duty", { token: ctx.vet });
+    assert.deepEqual(
+      { active: estado.data.active, opciones: estado.data.hoursOptions },
+      { active: true, opciones: [4, 8, 12] }
+    );
+  });
+
+  test("el dueño pide una urgencia, se avisa a los veterinarios de turno y solo puede tener una", async () => {
+    const disp = await http("GET", "/emergencies/availability", { token: ctx.clienteA });
+    assert.ok(disp.data.onDuty >= 1);
+
+    const r = await pedir(ctx.clienteA, { petId: ctx.mascota });
+    assert.equal(r.status, 201, errores(r));
+    assert.equal(r.data.emergency.status, "OPEN");
+    assert.equal(r.data.emergency.pet.name, "Michi");
+    assert.ok(r.data.emergency.expiresAt);
+    assert.equal(r.data.emergency.vet, null);
+    ctx.urgencia = r.data.emergency.id;
+
+    const avisos = await http("GET", "/notifications", { token: ctx.vet });
+    assert.match(avisos.data.notifications[0].message, /^URGENCIA en la veterinaria: Cliente clienteA QA \(Michi, Gato\)/);
+
+    const otra = await pedir(ctx.clienteA);
+    assert.equal(otra.status, 409);
+    assert.equal(otra.data.code, "EMERGENCY_IN_PROGRESS");
+  });
+
+  test("otro cliente no puede cancelar la urgencia ajena", async () => {
+    assert.equal((await accion(ctx.clienteB, ctx.urgencia, "cancel")).status, 404);
+  });
+
+  test("un veterinario fuera de turno no ve ni acepta urgencias; uno de turno ve los datos de contacto", async () => {
+    const vet2 = await tokenDe(ctx.emails.vet2);
+    const sin = await abiertas(vet2);
+    assert.deepEqual({ onDuty: sin.data.onDuty, total: sin.data.requests.length }, { onDuty: false, total: 0 });
+    assert.equal((await accion(vet2, ctx.urgencia, "accept")).status, 409);
+
+    const ve = await abiertas(ctx.vet);
+    assert.equal(ve.data.onDuty, true);
+    const u = ve.data.requests.find((x) => x.id === ctx.urgencia);
+    assert.deepEqual(
+      { cliente: u.client.name, telefono: u.phone, mascota: u.pet.name, sintomas: u.symptoms },
+      { cliente: "Cliente clienteA QA", telefono: "3001234567", mascota: "Michi", sintomas: SINTOMAS }
+    );
+
+    assert.equal((await abiertas(ctx.clienteA)).status, 403);
+    assert.equal((await abiertas(ctx.admin)).status, 403);
+    assert.equal((await pedir(ctx.vet)).status, 403, "un veterinario no pide urgencias");
+  });
+
+  test("una urgencia a domicilio solo llega a veterinarios que atienden a domicilio", async () => {
+    assert.equal((await accion(ctx.clienteA, ctx.urgencia, "cancel")).status, 200);
+    const vet2 = await tokenDe(ctx.emails.vet2);
+    assert.equal((await turno(vet2, 4)).status, 200); // vet2 solo atiende en veterinaria
+
+    const r = await pedir(ctx.clienteA, { mode: "HOME", address: "Calle 1 # 2-3", petId: ctx.mascota });
+    assert.equal(r.status, 201, errores(r));
+    const id = r.data.emergency.id;
+    assert.equal(r.data.emergency.address, "Calle 1 # 2-3");
+
+    assert.ok((await abiertas(ctx.vet)).data.requests.some((x) => x.id === id), "el que atiende a domicilio la ve");
+    assert.ok(!(await abiertas(vet2)).data.requests.some((x) => x.id === id), "el de solo veterinaria no");
+    const intento = await accion(vet2, id, "accept");
+    assert.equal(intento.status, 409);
+    assert.match(intento.data.message, /modalidad que no atiendes/);
+
+    assert.equal((await accion(ctx.clienteA, id, "cancel")).status, 200);
+  });
+
+  test("si dos veterinarios la aceptan a la vez, solo uno se queda con ella", async () => {
+    const vet2 = await tokenDe(ctx.emails.vet2);
+    const r = await pedir(ctx.clienteA, { petId: ctx.mascota });
+    assert.equal(r.status, 201, errores(r));
+    ctx.urgencia = r.data.emergency.id;
+
+    const [a, b] = await Promise.all([accion(ctx.vet, ctx.urgencia, "accept"), accion(vet2, ctx.urgencia, "accept")]);
+    assert.deepEqual([a.status, b.status].sort(), [200, 409]);
+    ctx.ganador = a.status === 200 ? ctx.vet : vet2;
+    ctx.libre = a.status === 200 ? vet2 : ctx.vet;
+  });
+
+  test("el dueño ve quien la atiende y como contactarlo, y recibe un aviso", async () => {
+    const m = await mia(ctx.clienteA);
+    assert.equal(m.data.active.status, "ACCEPTED");
+    assert.match(m.data.active.vet.name, new RegExp(`${NOMBRE_VET}|Vet Rechazado ${RUN}`));
+    assert.equal(m.data.active.vet.phone, "3001234567");
+    assert.match(m.data.active.vet.address, /Barrio QA/);
+    assert.equal(m.data.active.expiresAt, null);
+
+    const avisos = await http("GET", "/notifications", { token: ctx.clienteA });
+    assert.match(avisos.data.notifications[0].message, /aceptó tu urgencia/);
+  });
+
+  test("un veterinario con una urgencia en curso no puede aceptar otra", async () => {
+    const b = await pedir(ctx.clienteB);
+    assert.equal(b.status, 201, errores(b));
+    const r = await accion(ctx.ganador, b.data.emergency.id, "accept");
+    assert.equal(r.status, 409);
+    assert.match(r.data.message, /Ya tienes una urgencia en curso/);
+    assert.equal((await accion(ctx.clienteB, b.data.emergency.id, "cancel")).status, 200);
+  });
+
+  test("al aceptar una urgencia, el veterinario accede a la historia de esa mascota hasta que la libera", async () => {
+    const rex = await http("POST", "/pets", {
+      token: ctx.clienteB,
+      body: { name: "Rex", species: "Perro", sex: "Macho", birthDate: "2021-02-02" },
+    });
+    assert.equal(rex.status, 201, errores(rex));
+    const historia = () => http("GET", `/medical-records/pets/${rex.data.pet.id}`, { token: ctx.libre });
+
+    const u = await pedir(ctx.clienteB, { petId: rex.data.pet.id });
+    assert.equal(u.status, 201, errores(u));
+    assert.equal((await historia()).status, 404, "sin relacion con la mascota");
+
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "accept")).status, 200);
+    assert.equal((await historia()).status, 200, "con la urgencia aceptada");
+
+    const liberada = await accion(ctx.libre, u.data.emergency.id, "release");
+    assert.equal(liberada.status, 200, errores(liberada));
+    assert.equal((await historia()).status, 404, "al liberarla pierde el acceso");
+    assert.equal((await mia(ctx.clienteB)).data.active.status, "OPEN");
+    const aviso = await http("GET", "/notifications", { token: ctx.clienteB });
+    assert.match(aviso.data.notifications[0].message, /no puede atender tu urgencia/);
+
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "accept")).status, 200);
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "complete")).status, 200);
+    assert.equal((await historia()).status, 200, "atendida: conserva el acceso a la historia");
+
+    const m = await mia(ctx.clienteB);
+    assert.equal(m.data.active, null);
+    assert.equal(m.data.emergencies[0].status, "COMPLETED");
+    const fin = await http("GET", "/notifications", { token: ctx.clienteB });
+    assert.match(fin.data.notifications[0].message, /marcó tu urgencia como atendida/);
+
+    // Ya cerrada: no se puede completar ni liberar de nuevo.
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "complete")).status, 409);
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "release")).status, 409);
+  });
+
+  test("si el dueño cancela una urgencia aceptada, se avisa al veterinario", async () => {
+    const m = await mia(ctx.clienteA);
+    assert.equal((await accion(ctx.clienteA, m.data.active.id, "cancel")).status, 200);
+    const aviso = await http("GET", "/notifications", { token: ctx.ganador });
+    assert.match(aviso.data.notifications[0].message, /canceló su urgencia/);
+    assert.equal((await accion(ctx.ganador, m.data.active.id, "complete")).status, 409);
+  });
+
+  test("una urgencia que nadie acepta a tiempo vence", async () => {
+    const x = await pedir(ctx.clienteA);
+    assert.equal(x.status, 201, errores(x));
+    await prisma.emergencyRequest.update({
+      where: { id: x.data.emergency.id },
+      data: { createdAt: new Date(Date.now() - 31 * 60 * 1000) },
+    });
+    const m = await mia(ctx.clienteA);
+    assert.equal(m.data.active, null);
+    // La fecha se retraso a proposito: se busca por id, no por posicion en la lista.
+    assert.equal(m.data.emergencies.find((e) => e.id === x.data.emergency.id).status, "EXPIRED");
+    assert.equal((await accion(ctx.ganador, x.data.emergency.id, "accept")).status, 409);
+  });
+
+  test("al salir de turno el veterinario deja de recibir urgencias", async () => {
+    assert.equal((await turno(ctx.vet, 0)).status, 200);
+    assert.equal((await abiertas(ctx.vet)).data.onDuty, false);
+    const vet2 = await tokenDe(ctx.emails.vet2);
+    assert.equal((await turno(vet2, 0)).status, 200);
+    const disp = await http("GET", "/emergencies/availability", { token: ctx.clienteA });
+    assert.ok(disp.data.onDuty >= 0);
   });
 });
 

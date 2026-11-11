@@ -86,12 +86,19 @@ function toPetSummary(pet) {
 }
 
 // ¿El veterinario atiende (o atendio) a esta mascota?
+// Por una cita no cancelada o por una urgencia que acepto (en curso o atendida).
 async function vetTieneRelacion(vetProfileId, petId) {
   const cita = await prisma.appointment.findFirst({
     where: { vetProfileId, petId, status: { not: "CANCELLED" } },
     select: { id: true },
   });
-  return Boolean(cita);
+  if (cita) return true;
+
+  const urgencia = await prisma.emergencyRequest.findFirst({
+    where: { vetProfileId, petId, status: { in: ["ACCEPTED", "COMPLETED"] } },
+    select: { id: true },
+  });
+  return Boolean(urgencia);
 }
 
 // Carga la mascota si quien pide tiene acceso a su historia. Si no, responde

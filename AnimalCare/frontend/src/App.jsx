@@ -19,6 +19,7 @@ import RestablecerContrasena from "./pages/RestablecerContrasena";
 import VerificarCorreo from "./pages/VerificarCorreo";
 import MiCuenta from "./pages/MiCuenta";
 import Privacidad from "./pages/Privacidad";
+import Urgencias from "./pages/Urgencias";
 import RutaPrivada from "./components/RutaPrivada";
 
 function App() {
@@ -135,6 +136,16 @@ function App() {
           element={
             <RutaPrivada>
               <MiCuenta />
+            </RutaPrivada>
+          }
+        />
+
+        {/* Urgencias: lo que AN-23 llamaba emergencias */}
+        <Route
+          path="/urgencias"
+          element={
+            <RutaPrivada roles={["CLIENT", "VETERINARIAN"]}>
+              <Urgencias />
             </RutaPrivada>
           }
         />

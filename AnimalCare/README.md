@@ -56,7 +56,7 @@ Historias relacionadas que se adelantaron porque dependen de lo anterior:
 | AN-16    | Modificar citas por veterinario (reprogramar, confirmar, marcar atendida) | Implementada |
 | AN-17    | Visualizar citas pendientes de un dia por veterinario    | Implementada        |
 | AN-22    | Visualizar notificaciones por usuario                    | Implementada        |
-| AN-23    | Visualizar notificaciones por veterinario                | Implementada (sin "emergencias": no existe esa funcion) |
+| AN-23    | Visualizar notificaciones por veterinario                | Implementada (incluye las urgencias, ver abajo) |
 
 AN-15, AN-16, AN-17, AN-22 y AN-23 no tienen criterios de aceptacion en Jira. Los criterios
 implementados (y probados en `backend/tests/sprint2.test.js`) son:
@@ -109,6 +109,28 @@ Reglas de la historia clinica:
   `backend/uploads/records` con nombre aleatorio y solo se descargan por la API
   (`GET /api/medical-records/attachments/:id`) con sesion y permiso. Si la entrada se elimina, el dueño
   deja de verlos; el veterinario si, para auditoria.
+
+## Urgencias (lo que AN-23 llamaba "emergencias")
+
+Un dueño con una mascota en apuros pide atencion urgente y los veterinarios que estan **de turno** la reciben.
+
+1. **El veterinario se pone de turno** por 4, 8 o 12 horas desde `/urgencias` (solo cuentas aprobadas). Al
+   vencer el plazo deja de recibir urgencias; tambien puede salir antes.
+2. **El dueño describe la urgencia:** sintomas (10 a 500 caracteres), mascota (opcional), telefono y si la
+   atencion es en la veterinaria o a domicilio (con direccion). Solo puede tener **una urgencia en curso**.
+3. **Se avisa a los veterinarios de turno compatibles** con la modalidad (una urgencia a domicilio solo llega a
+   quienes atienden a domicilio). El primero que la acepta se queda con ella: la toma es atomica, si dos la
+   aceptan a la vez solo uno la consigue. Un veterinario atiende una urgencia a la vez.
+4. **El dueño ve quien la atiende**, con su telefono y, si es en la veterinaria, la direccion. La pantalla se
+   actualiza sola cada 10 segundos.
+5. **Cierre:** el veterinario la marca como atendida, o la libera si no puede (vuelve a abrirse y se avisa a
+   los demas); el dueño puede cancelarla; si nadie la acepta en `EMERGENCY_TTL_MIN` minutos (30) vence.
+6. **Historia clinica:** el veterinario que acepta una urgencia con una mascota accede a su historia clinica
+   mientras la atiende y despues de atenderla (no si la libera).
+
+AnimalCare conecta con veterinarios de turno pero **no garantiza una respuesta**: la pantalla del dueño
+recuerda que, si la mascota esta grave, debe acudir de inmediato a la clinica veterinaria mas cercana.
+Cada paso genera una notificacion para la otra persona.
 
 ## Zona horaria
 
@@ -300,6 +322,7 @@ JWT_EXPIRES_IN="2h"
 | `REMINDERS_ENABLED` | `true` | `false` desactiva los recordatorios (por ejemplo en un servidor de pruebas) |
 | `REMINDER_INTERVAL_MS` | `600000` | Cada cuanto se revisan las citas para recordar |
 | `CLINIC_TIMEZONE` | `America/Bogota` | Zona horaria de la agenda |
+| `EMERGENCY_TTL_MIN` | `30` | Minutos que una urgencia espera a que la acepten antes de vencer |
 | `CORS_ORIGIN` | `http://localhost:5173,http://127.0.0.1:5173` | Origenes del frontend autorizados (separados por coma) |
 | `FRONTEND_URL` | `http://localhost:5173` | Base de los enlaces que van en los correos |
 | `TRUST_PROXY` | `false` | `true` detras de nginx o Docker, para leer la IP real |
@@ -403,6 +426,16 @@ maquina.
 | GET    | /api/notifications       | Si      | Cualquiera | Ultimas notificaciones del usuario             |
 | PATCH  | /api/notifications/:id/read | Si   | Cualquiera | Marca una notificacion como leida              |
 | PATCH  | /api/notifications/read-all | Si   | Cualquiera | Marca todas como leidas (AN-22, AN-23)         |
+| GET    | /api/emergencies/availability | Si | CLIENT   | Cuantos veterinarios estan de turno (total, a domicilio, en veterinaria) |
+| POST   | /api/emergencies         | Si      | CLIENT   | Pide una urgencia `{ symptoms, mode, phone, address?, petId? }` (409 si ya tiene una en curso o no hay veterinarios de turno) |
+| PATCH  | /api/emergencies/:id/cancel | Si   | CLIENT   | Cancela su urgencia (abierta o aceptada)         |
+| GET    | /api/emergencies/mine    | Si      | CLIENT, VETERINARIAN | Sus urgencias; `active` es la que esta en curso |
+| GET    | /api/emergencies/duty    | Si      | VETERINARIAN | Estado del turno                              |
+| PUT    | /api/emergencies/duty    | Si      | VETERINARIAN | Se pone de turno `{ hours: 4\|8\|12 }` o sale `{ hours: 0 }` |
+| GET    | /api/emergencies/open    | Si      | VETERINARIAN | Urgencias abiertas compatibles (solo si esta de turno) |
+| PATCH  | /api/emergencies/:id/accept | Si   | VETERINARIAN | Acepta una urgencia (atomico; 409 si otro la tomo) |
+| PATCH  | /api/emergencies/:id/complete | Si | VETERINARIAN | La marca como atendida                       |
+| PATCH  | /api/emergencies/:id/release | Si  | VETERINARIAN | La libera: vuelve a abrirse para los demas    |
 | GET    | /api/admin/users         | Si      | ADMIN    | Listado paginado (`page`, `pageSize`) con filtros `status`, `role`, `q` (AN-38) |
 | GET    | /api/admin/users/:id/license-doc | Si | ADMIN | Descarga la tarjeta profesional de un veterinario |
 | PATCH  | /api/admin/users/:id/approve | Si  | ADMIN    | Aprueba un veterinario (AN-35)                   |
@@ -499,6 +532,7 @@ Con `"mode": "HOME"` el campo `address` es obligatorio: es la direccion donde se
 | /veterinarios/:id/agendar     | Si      | Modalidad, fecha y hora (AN-10, AN-11, AN-13)   |
 | /citas                        | Si      | Cliente: proximas e historial, con cancelacion (AN-14). Veterinario: agenda por dia con confirmar, reprogramar y cancelar (AN-15, AN-16, AN-17) |
 | /notificaciones               | Si      | Avisos del usuario (AN-22, AN-23)              |
+| /urgencias                    | Si      | Dueño: pedir y seguir una urgencia. Veterinario: turno, urgencias abiertas y en curso |
 | /mascotas                     | Si      | Cliente: sus mascotas                          |
 | /mascotas/:id/historia        | Si      | Cliente: historia clinica de su mascota (AN-21) |
 | /pacientes/:id                | Si      | Veterinario: historia clinica de un paciente (AN-18, AN-19, AN-20) |
@@ -530,7 +564,7 @@ request, con una base MySQL temporal. Un pull request con pruebas fallidas queda
 Las evidencias manuales (Postman, capturas) se guardan en la carpeta `docs/`.
 
 Ademas, `backend/tests/sprint2.test.js` recorre automaticamente los criterios de aceptacion del
-Sprint 2, del Sprint 3, de las mejoras y de la cuenta contra la API (132 casos). Con el backend corriendo, desde `backend/`:
+Sprint 2, del Sprint 3, de las mejoras y de la cuenta contra la API (146 casos). Con el backend corriendo, desde `backend/`:
 
 ```
 npm test
