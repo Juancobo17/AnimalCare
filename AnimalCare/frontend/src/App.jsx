@@ -13,6 +13,7 @@ import AdminUsuarios from "./pages/AdminUsuarios";
 import NotificacionesPagina from "./pages/NotificacionesPagina";
 import MisMascotas from "./pages/MisMascotas";
 import MiPerfil from "./pages/MiPerfil";
+import HistoriaClinica from "./pages/HistoriaClinica";
 import RutaPrivada from "./components/RutaPrivada";
 
 function App() {
@@ -91,6 +92,23 @@ function App() {
           element={
             <RutaPrivada roles={["CLIENT"]}>
               <MisMascotas />
+            </RutaPrivada>
+          }
+        />
+        {/* Historias clinicas: AN-21 (dueño) y AN-18, AN-19, AN-20 (veterinario) */}
+        <Route
+          path="/mascotas/:id/historia"
+          element={
+            <RutaPrivada roles={["CLIENT"]}>
+              <HistoriaClinica />
+            </RutaPrivada>
+          }
+        />
+        <Route
+          path="/pacientes/:id"
+          element={
+            <RutaPrivada roles={["VETERINARIAN"]}>
+              <HistoriaClinica />
             </RutaPrivada>
           }
         />

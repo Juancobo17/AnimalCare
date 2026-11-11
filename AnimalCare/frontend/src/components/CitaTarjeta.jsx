@@ -10,6 +10,7 @@
 //   Veterinario:  confirmar, reprogramar, cancelar con motivo (AN-15, AN-16)
 //                 y marcar como atendida
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { MODALIDADES, obtenerHorarios } from "../services/vet.service";
 import {
@@ -17,6 +18,7 @@ import {
   formatearFecha,
   esCancelable,
   esCompletable,
+  inicioDeCita,
   cancelarCita,
   reprogramarCita,
   confirmarCita,
@@ -242,6 +244,12 @@ function CitaTarjeta({ cita, perspectiva = "cliente", onActualizada }) {
         {cita.pet && (
           <p className="texto-suave">
             {ICONO_ESPECIE[cita.pet.species] || "🐾"} {cita.pet.name} ({cita.pet.species})
+            {esVistaDelVeterinario && cita.status !== "CANCELLED" && (
+              <>
+                {" · "}
+                <Link to={`/pacientes/${cita.pet.id}`}>Ver historia clínica</Link>
+              </>
+            )}
           </p>
         )}
         {direccion && <p className="texto-suave">📍 {direccion}</p>}
@@ -268,6 +276,23 @@ function CitaTarjeta({ cita, perspectiva = "cliente", onActualizada }) {
         )}
 
         {error && <p className="error-campo">{error}</p>}
+
+        {/* AN-18: despues de la consulta, registrarla en la historia de la mascota. */}
+        {conAcciones &&
+          esVistaDelVeterinario &&
+          cita.pet &&
+          cita.status !== "CANCELLED" &&
+          !cita.medicalRecordId &&
+          inicioDeCita(cita).getTime() <= Date.now() && (
+            <div className="cita-acciones">
+              <Link to={`/pacientes/${cita.pet.id}?cita=${cita.id}`} className="boton boton-secundario boton-auto">
+                Registrar en historia clínica
+              </Link>
+            </div>
+          )}
+        {esVistaDelVeterinario && cita.medicalRecordId && (
+          <p className="ayuda">✓ Registrada en la historia clínica.</p>
+        )}
 
         {panel === null && calificable && (
           <div className="cita-acciones">

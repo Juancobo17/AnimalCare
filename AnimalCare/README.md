@@ -82,6 +82,29 @@ Decisiones del Sprint 2:
 - **Notificaciones dentro de la plataforma**: aprobacion, rechazo, suspension y reactivacion de la
   cuenta, cancelaciones hechas por el cliente y por bloqueos de agenda. Son la base de AN-22 y AN-23.
 
+## Alcance del Sprint 3
+
+| Historia | Descripcion | Estado en el codigo |
+| -------- | ----------- | ------------------- |
+| AN-15, AN-16, AN-17 | Agenda del veterinario (cancelar, modificar, ver por dia) | Implementadas en el Sprint 2 |
+| AN-22, AN-23 | Notificaciones | Implementadas en el Sprint 2 |
+| AN-18 | Crear historia clinica | Implementada |
+| AN-19 | Eliminar historia clinica (anula la entrada con motivo) | Implementada |
+| AN-20 | Modificar historia clinica | Implementada |
+| AN-21 | El dueño accede a la historia clinica de su mascota | Implementada |
+
+Los criterios de aceptacion de estas historias, listos para copiar en Jira, estan en
+[docs/criterios-aceptacion-sprint3.md](docs/criterios-aceptacion-sprint3.md).
+
+Reglas de la historia clinica:
+
+- Es la lista de entradas de una mascota, una por consulta (motivo, diagnostico, tratamiento, peso,
+  temperatura, vacunas y observaciones).
+- Un veterinario ve y escribe en la historia solo de mascotas que tienen o tuvieron una cita con el
+  (no cancelada). Ve tambien las entradas de otros veterinarios, pero solo modifica o elimina las suyas.
+- Eliminar no borra: anula la entrada con un motivo. El dueño deja de verla y se conserva para auditoria.
+- El dueño consulta (solo lectura) la historia de sus mascotas y recibe un aviso con cada entrada nueva.
+
 ## Zona horaria
 
 Todas las fechas y horas "de pared" (`AAAA-MM-DD`, `HH:MM`) se interpretan en la zona de la clinica,
@@ -310,6 +333,10 @@ npm run dev
 | PATCH  | /api/appointments/:id/confirm | Si | VETERINARIAN | Confirma una cita pendiente (AN-16)         |
 | PATCH  | /api/appointments/:id/complete | Si | VETERINARIAN | Marca como atendida una cita cuya hora ya llego (AN-16) |
 | POST   | /api/appointments/:id/review | Si  | CLIENT   | Califica una cita atendida `{ rating: 1-5, comment? }` |
+| GET    | /api/medical-records/pets/:petId | Si | CLIENT, VETERINARIAN | Historia clinica de una mascota (AN-21) |
+| POST   | /api/medical-records     | Si      | VETERINARIAN | Crea una entrada (AN-18)                     |
+| PUT    | /api/medical-records/:id | Si      | VETERINARIAN | Modifica una entrada propia (AN-20)          |
+| PATCH  | /api/medical-records/:id/annul | Si | VETERINARIAN | Elimina (anula) una entrada propia `{ reason }` (AN-19) |
 | GET    | /api/pets                | Si      | CLIENT   | Mascotas activas del dueño                       |
 | POST   | /api/pets                | Si      | CLIENT   | Registra una mascota `{ name, species, sex, birthDate, weight? }` |
 | PUT    | /api/pets/:id            | Si      | CLIENT   | Actualiza una mascota propia                     |
@@ -424,6 +451,8 @@ Con `"mode": "HOME"` el campo `address` es obligatorio: es la direccion donde se
 | /citas                        | Si      | Cliente: proximas e historial, con cancelacion (AN-14). Veterinario: agenda por dia con confirmar, reprogramar y cancelar (AN-15, AN-16, AN-17) |
 | /notificaciones               | Si      | Avisos del usuario (AN-22, AN-23)              |
 | /mascotas                     | Si      | Cliente: sus mascotas                          |
+| /mascotas/:id/historia        | Si      | Cliente: historia clinica de su mascota (AN-21) |
+| /pacientes/:id                | Si      | Veterinario: historia clinica de un paciente (AN-18, AN-19, AN-20) |
 | /mi-perfil                    | Si      | Veterinario: perfil, foto y tarjeta profesional |
 | /mis-servicios                | Si      | Veterinario: agregar, editar y eliminar servicios (AN-28, AN-29, AN-30) |
 | /mi-horario                   | Si      | Veterinario: horario semanal y bloqueos (AN-31) |

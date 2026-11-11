@@ -1,6 +1,7 @@
 // Mascotas del dueño: registrar, editar y quitar de la lista.
 // Al agendar una cita se elige cuál de ellas se atiende.
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import Cabecera from "../components/Cabecera";
 import Alerta from "../components/Alerta";
@@ -232,6 +233,9 @@ function MisMascotas() {
                     </div>
                   ) : (
                     <div className="acciones-linea">
+                      <Link to={`/mascotas/${m.id}/historia`} className="boton boton-primario boton-auto">
+                        Historia clínica
+                      </Link>
                       <button type="button" className="boton boton-secundario boton-auto" onClick={() => setEditando(m.id)}>
                         Editar
                       </button>

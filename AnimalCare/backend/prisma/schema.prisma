@@ -98,6 +98,9 @@ model Pet {
   // Citas a las que se llevo esta mascota
   appointments Appointment[]
 
+  // Historia clinica: una entrada por consulta (AN-18 a AN-21)
+  medicalRecords MedicalRecord[]
+
   @@index([userId])
 }
 
@@ -133,6 +136,7 @@ model VetProfile {
   appointments   Appointment[]
   blocks         ScheduleBlock[]
   reviews        Review[]
+  medicalRecords MedicalRecord[]
 }
 
 // Servicio que ofrece un veterinario (consulta, vacunacion, bano...).
@@ -204,6 +208,9 @@ model Appointment {
   // Resena del cliente, solo despues de que la cita fue atendida.
   review Review?
 
+  // Entrada de historia clinica registrada para esta cita (una como maximo).
+  medicalRecord MedicalRecord?
+
   @@index([clientId])
   @@index([vetProfileId, scheduledAt])
 }
@@ -257,3 +264,43 @@ model Review {
 
   @@index([vetProfileId, createdAt])
 }
+
+// Estado de una entrada de historia clinica. No se borran fisicamente:
+// "eliminar" (AN-19) la anula con un motivo y se conserva para auditoria.
+enum MedicalRecordStatus {
+  ACTIVE
+  ANNULLED
+}
+
+// Entrada de la historia clinica de una mascota (AN-18, AN-19, AN-20, AN-21).
+// La historia de una mascota es la lista de sus entradas, una por consulta.
+model MedicalRecord {
+  id           Int                 @id @default(autoincrement())
+  visitDate    DateTime // fecha de la consulta
+  reason       String // motivo de consulta
+  diagnosis    String              @db.Text
+  treatment    String?             @db.Text
+  weight       Decimal?            @db.Decimal(6, 2) // kg
+  temperature  Decimal?            @db.Decimal(4, 1) // grados C
+  vaccines     String?             @db.Text // vacunas aplicadas
+  observations String?             @db.Text
+  status       MedicalRecordStatus @default(ACTIVE)
+  annulReason  String?
+  annulledAt   DateTime?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  petId Int
+  pet   Pet @relation(fields: [petId], references: [id])
+
+  // Veterinario que escribio la entrada: es el unico que puede modificarla o anularla.
+  vetProfileId Int
+  vetProfile   VetProfile @relation(fields: [vetProfileId], references: [id])
+
+  // Cita de la que sale la entrada (opcional).
+  appointmentId Int?         @unique
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+
+  @@index([petId, visitDate])
+}
+
