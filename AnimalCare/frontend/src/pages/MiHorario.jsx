@@ -13,13 +13,14 @@ import {
 import { DIAS_SEMANA } from "../services/vet.service";
 import { formatearFecha } from "../services/appointment.service";
 import { obtenerMensajesDeError } from "../services/api";
+import { hoyLocal } from "../services/zona";
 
 // Lunes primero, domingo al final.
 const ORDEN_DIAS = [1, 2, 3, 4, 5, 6, 0];
 
-// Fecha de hoy en "AAAA-MM-DD" (la API trabaja en UTC).
+// Fecha de hoy en "AAAA-MM-DD", en la zona de la clinica.
 function hoy() {
-  return new Date().toISOString().slice(0, 10);
+  return hoyLocal();
 }
 
 // ---------- Horario semanal ----------

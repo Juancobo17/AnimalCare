@@ -4,7 +4,14 @@
 // y la parte de consulta de AN-13 (que horarios estan libres).
 const vetService = require("../services/vet.service");
 const { parseId } = require("../utils/params");
-const { parseDate, DEFAULT_DURATION_MINUTES, MAX_SCHEDULE_DAYS } = require("../utils/schedule");
+const {
+  parseDate,
+  startOfDay,
+  addDays,
+  toDateString,
+  DEFAULT_DURATION_MINUTES,
+  MAX_SCHEDULE_DAYS,
+} = require("../utils/schedule");
 
 const { MODOS_VALIDOS, validateMode } = vetService;
 
@@ -66,8 +73,8 @@ async function listVets(req, res) {
 
     // Proximo turno libre de cada uno, con dos consultas para todos.
     const ahora = new Date();
-    const desde = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate()));
-    const hasta = new Date(desde.getTime() + NEXT_SLOT_DAYS * 24 * 60 * 60 * 1000);
+    const desde = startOfDay(ahora);
+    const hasta = addDays(desde, NEXT_SLOT_DAYS);
     const ocupados = await vetService.findBusyByVet(vets.map((v) => v.id), desde, hasta);
 
     let lista = vets.map((vet) => ({
@@ -76,7 +83,7 @@ async function listVets(req, res) {
     }));
 
     if (today === "true") {
-      const hoy = desde.toISOString().slice(0, 10);
+      const hoy = toDateString(desde);
       lista = lista.filter((vet) => vet.nextSlot && vet.nextSlot.date === hoy);
     }
 
@@ -158,8 +165,8 @@ async function getDays(req, res) {
     }
 
     const ahora = new Date();
-    const desde = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate()));
-    const hasta = new Date(desde.getTime() + NEXT_SLOT_DAYS * 24 * 60 * 60 * 1000);
+    const desde = startOfDay(ahora);
+    const hasta = addDays(desde, NEXT_SLOT_DAYS);
     const ocupados = await vetService.findBusyByVet([vetProfileId], desde, hasta);
     const dias = vetService.slotsByDay(vetProfile, ocupados.get(vetProfileId), {
       dias: NEXT_SLOT_DAYS,
@@ -204,8 +211,8 @@ async function getSlots(req, res) {
     }
 
     // No tiene sentido consultar la agenda de un dia que ya paso.
-    const hoy = parseDate(new Date().toISOString().slice(0, 10));
-    const limite = new Date(hoy.getTime() + MAX_SCHEDULE_DAYS * 24 * 60 * 60 * 1000);
+    const hoy = startOfDay();
+    const limite = addDays(hoy, MAX_SCHEDULE_DAYS);
 
     if (fecha < hoy) {
       return res.status(400).json({

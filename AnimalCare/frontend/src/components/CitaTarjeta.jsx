@@ -24,7 +24,7 @@ import {
   calificarCita,
   clientePuedeCancelar,
   HORAS_MINIMAS_CANCELACION,
-  hoyUTC,
+  hoyLocal,
 } from "../services/appointment.service";
 import { ICONO_ESPECIE } from "../services/pet.service";
 import { obtenerMensajesDeError } from "../services/api";
@@ -81,7 +81,7 @@ function FormularioReprogramar({ cita, onListo, onCerrar }) {
       <div className="fila">
         <div className="campo">
           <label htmlFor={`fecha-${cita.id}`}>Nueva fecha</label>
-          <input id={`fecha-${cita.id}`} type="date" min={hoyUTC()} value={fecha} onChange={(e) => elegirFecha(e.target.value)} />
+          <input id={`fecha-${cita.id}`} type="date" min={hoyLocal()} value={fecha} onChange={(e) => elegirFecha(e.target.value)} />
         </div>
         <div className="campo">
           <label htmlFor={`hora-${cita.id}`}>Nueva hora</label>

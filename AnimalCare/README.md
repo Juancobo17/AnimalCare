@@ -82,6 +82,17 @@ Decisiones del Sprint 2:
 - **Notificaciones dentro de la plataforma**: aprobacion, rechazo, suspension y reactivacion de la
   cuenta, cancelaciones hechas por el cliente y por bloqueos de agenda. Son la base de AN-22 y AN-23.
 
+## Zona horaria
+
+Todas las fechas y horas "de pared" (`AAAA-MM-DD`, `HH:MM`) se interpretan en la zona de la clinica,
+`CLINIC_TIMEZONE` (por defecto `America/Bogota`), sin importar donde corra el servidor ni la zona del
+navegador. En la base de datos se guardan instantes (UTC). Las utilidades estan en
+`backend/src/utils/schedule.js` y `frontend/src/services/zona.js`, con pruebas unitarias en
+`backend/tests/schedule.test.js` y `frontend/src/services/zona.test.js`.
+
+Las bases creadas antes de este cambio guardaban la hora de pared como si fuera UTC. Para corregirlas
+una sola vez: `node scripts/fix-timezone-data.js --aplicar` (sin `--aplicar` solo muestra que cambiaria).
+
 ### Mejoras de experiencia de usuario
 
 Se agregaron tomando como referencia las plataformas de agendamiento veterinario habituales:
@@ -246,6 +257,7 @@ JWT_EXPIRES_IN="2h"
 | `CLIENT_CANCEL_MIN_HOURS` | `2` | Horas antes de la cita hasta las que el cliente puede cancelar |
 | `REMINDERS_ENABLED` | `true` | `false` desactiva los recordatorios (por ejemplo en un servidor de pruebas) |
 | `REMINDER_INTERVAL_MS` | `600000` | Cada cuanto se revisan las citas para recordar |
+| `CLINIC_TIMEZONE` | `America/Bogota` | Zona horaria de la agenda |
 
 ## Instalacion
 
