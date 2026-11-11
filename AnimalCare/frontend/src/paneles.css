@@ -53,20 +53,21 @@
   flex-direction: column;
   gap: 2px;
   padding: 14px;
-  background-color: var(--blanco);
+  background-color: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: var(--radio);
   cursor: pointer;
 }
 
 .opcion-rol:hover {
-  border-color: var(--verde-200);
+  border-color: var(--verde-500);
+  background-color: var(--verde-50);
 }
 
 .opcion-rol.activa {
-  border-color: var(--verde-500);
-  background-color: var(--verde-50);
-  box-shadow: 0 0 0 3px var(--verde-100);
+  border-color: var(--verde-600);
+  background-color: var(--verde-tinte);
+  box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.3);
 }
 
 /* El radio real queda oculto: la tarjeta completa es el control,
@@ -150,34 +151,7 @@
 
 /* ---------- Cabecera con menu ---------- */
 
-.cabecera-marca {
-  text-decoration: none;
-}
-
-.cabecera-menu {
-  display: flex;
-  gap: 20px;
-  margin-left: auto;
-  margin-right: 8px;
-}
-
-.cabecera-enlace {
-  padding: 6px 0;
-  color: var(--texto-suave);
-  font-size: 0.95rem;
-  font-weight: 600;
-  text-decoration: none;
-  border-bottom: 2px solid transparent;
-}
-
-.cabecera-enlace:hover {
-  color: var(--verde-700);
-}
-
-.cabecera-enlace.active {
-  color: var(--verde-700);
-  border-bottom-color: var(--verde-500);
-}
+/* ---------- Menu de la cuenta ---------- */
 
 /* ---------- Encabezados de seccion y enlaces ---------- */
 
@@ -208,10 +182,6 @@
 
 .enlace-volver:hover {
   text-decoration: underline;
-}
-
-.acciones-panel {
-  margin-top: 18px;
 }
 
 /* ---------- Lista de datos ---------- */
@@ -261,9 +231,9 @@
 }
 
 .etiqueta-pending {
-  color: #8a5a00;
-  background-color: #fff6e5;
-  border-color: #f5dcae;
+  color: var(--aviso-texto);
+  background-color: var(--aviso-fondo);
+  border-color: var(--aviso-borde);
 }
 
 .etiqueta-confirmed {
@@ -286,32 +256,25 @@
 
 /* ---------- Listado de veterinarios ---------- */
 
-.filtros {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 0 16px;
-  margin-top: 18px;
-}
-
-.filtros .campo {
-  margin-bottom: 0;
-}
-
 .lista-veterinarios {
   display: grid;
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 30rem), 1fr));
+  gap: 20px;
+  align-items: stretch;
 }
 
 .tarjeta-veterinario {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 16px;
+  padding: 22px;
   margin-bottom: 0;
 }
 
 .tarjeta-veterinario p {
-  margin: 4px 0;
+  margin: 0;
 }
 
 /* ---------- Perfil del veterinario ---------- */
@@ -386,7 +349,7 @@
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--verde-700);
-  background-color: var(--blanco);
+  background-color: var(--superficie);
   border: 1px solid var(--verde-200);
   border-radius: var(--radio);
   cursor: pointer;
@@ -426,7 +389,7 @@
   align-items: flex-start;
   gap: 18px;
   padding: 16px;
-  background-color: var(--blanco);
+  background-color: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: var(--radio);
 }
@@ -434,6 +397,7 @@
 .cita-fecha {
   display: flex;
   flex-direction: column;
+  flex: 0 0 245px;
   min-width: 132px;
   padding-right: 18px;
   border-right: 1px solid var(--borde);
@@ -476,7 +440,6 @@
 @media (max-width: 720px) {
   .fila,
   .selector-rol,
-  .filtros,
   .servicio-fila {
     grid-template-columns: 1fr;
   }
@@ -506,11 +469,13 @@
     border-bottom: 1px solid var(--borde);
   }
 
-  .cabecera-menu {
-    order: 3;
-    width: 100%;
-    margin: 0;
-  }
+  
+
+  
+
+  
+
+  
 }
 
 /* ---------- Foto, calificación y avisos (correcciones Sprint 1) ---------- */
@@ -554,7 +519,7 @@
 
 .calificacion-estrellas {
   margin-right: 6px;
-  color: #e0a100;
+  color: var(--estrella);
   letter-spacing: 1px;
 }
 
@@ -578,8 +543,8 @@
 .aviso-verificacion {
   padding: 10px 24px;
   font-size: 0.9rem;
-  color: #8a5a00;
-  background-color: #fff6e5;
+  color: var(--aviso-texto);
+  background-color: var(--aviso-fondo);
   border-bottom: 1px solid #f1d9a6;
 }
 
@@ -587,7 +552,7 @@
 
 .boton-peligro {
   color: #a32020;
-  background-color: var(--blanco);
+  background-color: var(--superficie);
   border-color: #f0c4c4;
 }
 
@@ -603,10 +568,6 @@
   margin-top: 12px;
 }
 
-.cita-confirmacion span {
-  font-weight: 600;
-}
-
 /* ---------- Panel del veterinario (AN-28 a AN-31) ---------- */
 
 .acciones-linea {
@@ -614,30 +575,6 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-}
-
-.servicio-gestion {
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.servicio-gestion > form {
-  flex: 1 1 100%;
-}
-
-.servicio-gestion-acciones {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-.lista-franjas {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
 }
 
 .franja {
@@ -652,7 +589,7 @@
   padding: 9px 11px;
   font: inherit;
   color: var(--texto);
-  background-color: var(--blanco);
+  background-color: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: var(--radio);
 }
@@ -662,10 +599,6 @@
 }
 
 /* ---------- Panel del administrador (AN-35, AN-37, AN-38) ---------- */
-
-.contenedor-ancho {
-  max-width: 1100px;
-}
 
 .pestanas {
   display: flex;
@@ -682,7 +615,7 @@
   font: inherit;
   font-weight: 600;
   color: var(--texto-suave);
-  background-color: var(--blanco);
+  background-color: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: 999px;
   cursor: pointer;
@@ -722,10 +655,12 @@
 }
 
 .tabla th {
+  padding-bottom: 10px;
   font-size: 0.82rem;
   color: var(--texto-suave);
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  border-bottom: 2px solid var(--borde);
 }
 
 .tabla-detalle td {
@@ -785,7 +720,7 @@
   padding: 9px 11px;
   font: inherit;
   color: var(--texto);
-  background-color: var(--blanco);
+  background-color: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: var(--radio);
 }
@@ -814,21 +749,23 @@
 
 .campana {
   position: relative;
-  font-size: 1.1rem;
 }
 
 .campana-contador {
   position: absolute;
-  top: -2px;
-  right: -6px;
-  min-width: 18px;
-  padding: 0 5px;
-  font-size: 0.7rem;
+  top: 2px;
+  right: 0;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  font-size: 0.68rem;
   font-weight: 700;
-  line-height: 18px;
+  line-height: 16px;
   color: var(--blanco);
   text-align: center;
   background-color: var(--error-texto);
+  border: 2px solid var(--verde-oscuro);
   border-radius: 999px;
 }
 
@@ -843,14 +780,7 @@
 /* ---------- Ajustes de la revision de pantallas ---------- */
 
 /* La columna de fecha de las citas mide lo mismo en todas las tarjetas. */
-.cita-fecha {
-  flex: 0 0 245px;
-}
-
 /* Servicios del veterinario: nombre, precio y botones alineados. */
-.servicio-gestion {
-  align-items: center;
-}
 
 /* Texto del horario inicial separado del boton "Agregar otro servicio". */
 .ayuda-horario {
@@ -920,44 +850,14 @@
 
 /* ---------- Mejoras: buscador ---------- */
 
-.filtros-tres {
-  grid-template-columns: 1fr 1fr 1fr;
-}
-
-.casilla-linea {
-  margin: 0;
-}
-
+/* Cantidad de resultados: con fondo propio para leerse sobre el patron de huellas. */
 .resultados {
-  margin: 0 4px 10px;
-}
-
-.vet-acciones {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  min-width: 160px;
-  text-align: center;
-}
-
-.proximo-turno {
-  display: flex;
-  flex-direction: column;
-  margin: 0 0 4px;
-  padding: 8px 10px;
-  background-color: var(--verde-50);
-  border: 1px solid var(--verde-100);
-  border-radius: var(--radio);
-}
-
-.proximo-turno strong {
-  color: var(--verde-700);
-}
-
-.proximo-turno.sin-turno {
-  background-color: transparent;
-  border-color: var(--borde);
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 4px 14px;
+  background-color: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
 }
 
 /* ---------- Mejoras: agendar ---------- */
@@ -976,7 +876,7 @@
   padding: 8px 4px;
   font: inherit;
   color: var(--texto);
-  background-color: var(--blanco);
+  background-color: var(--superficie);
   border: 1px solid var(--verde-200);
   border-radius: var(--radio);
   cursor: pointer;
@@ -1120,6 +1020,7 @@
   width: 56px;
   height: 56px;
   font-size: 1.8rem;
+  color: var(--verde-700);
   background-color: var(--verde-50);
   border-radius: 50%;
 }
@@ -1141,6 +1042,7 @@
 .semana {
   display: flex;
   flex-direction: column;
+  gap: 8px;
   margin-bottom: 16px;
 }
 
@@ -1149,8 +1051,11 @@
   grid-template-columns: 140px 1fr auto;
   align-items: center;
   gap: 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--borde);
+  padding: 12px 16px;
+  background-color: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  transition: border-color var(--transicion), background-color var(--transicion);
 }
 
 .semana-dia-libre .semana-nombre {
@@ -1212,14 +1117,11 @@
 }
 
 @media (max-width: 720px) {
-  .filtros-tres,
   .fila-tres {
     grid-template-columns: 1fr;
   }
 
-  .vet-acciones {
-    width: 100%;
-  }
+  
 
   .semana-dia {
     grid-template-columns: 1fr;
@@ -1238,4 +1140,325 @@
   .tabla td[data-etiqueta="Registro"] {
     white-space: nowrap;
   }
+}
+
+/* ---------- Historias clinicas (AN-18 a AN-21) ---------- */
+
+.historia {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0 0 0 24px;
+  list-style: none;
+}
+
+.entrada {
+  position: relative;
+  padding: 16px 18px;
+  background-color: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.historia::before {
+  content: "";
+  position: absolute;
+  top: 24px;
+  bottom: 24px;
+  left: 6px;
+  width: 2px;
+  background-color: var(--verde-200);
+}
+
+
+.entrada::before {
+  content: "";
+  position: absolute;
+  top: 20px;
+  left: -24px;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  background-color: var(--verde-600);
+  border: 3px solid var(--fondo);
+  border-radius: 50%;
+  box-sizing: content-box;
+  transform: translateX(-3px);
+}
+
+.entrada h4 {
+  margin: 6px 0 8px;
+}
+
+.entrada-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.entrada-datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 12px 20px;
+  margin: 0 0 12px;
+}
+
+.entrada-datos dt {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.entrada-datos dd {
+  margin: 2px 0 0;
+  white-space: pre-line;
+}
+
+.entrada-anulada {
+  background-color: transparent;
+  border-style: dashed;
+}
+
+.entrada-anulada::before {
+  background-color: #c4c9d0;
+}
+
+/* Al imprimir la historia solo se ve su contenido. */
+@media print {
+  .cabecera,
+  .aviso-verificacion,
+  .no-imprimir,
+  .alerta {
+    display: none !important;
+  }
+
+  .pagina,
+  body {
+    background: #fff;
+  }
+
+  .tarjeta {
+    box-shadow: none;
+    border: 0;
+  }
+}
+
+/* ---------- Cuenta y privacidad ---------- */
+
+.consentimiento {
+  align-items: flex-start;
+  margin: 8px 0 4px;
+  font-size: 0.9rem;
+}
+
+.consentimiento input {
+  margin-top: 3px;
+}
+
+.consentimiento.con-error {
+  padding: 8px;
+  background-color: var(--error-fondo);
+  border: 1px solid var(--error-borde);
+  border-radius: var(--radio);
+}
+
+.zona-peligro {
+  border-color: var(--error-borde);
+}
+
+.documento h3 {
+  margin-top: 24px;
+}
+
+.documento ul {
+  padding-left: 20px;
+}
+
+.documento li {
+  margin-bottom: 6px;
+}
+
+/* ---------- Adjuntos de la historia clinica ---------- */
+
+.adjuntos {
+  margin: 12px 0 8px;
+}
+
+.adjuntos h5 {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.adjuntos-lista {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.adjuntos-lista li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--borde);
+}
+
+.adjunto-tipo {
+  min-width: 42px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--verde-700);
+  background-color: var(--verde-50);
+  border: 1px solid var(--verde-200);
+  border-radius: 6px;
+}
+
+.adjunto-nombre {
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.adjunto-quitar {
+  margin-left: auto;
+  color: var(--error-texto);
+}
+
+/* ---------- Urgencias ---------- */
+
+.alerta-urgencia {
+  padding: 14px 16px;
+  margin-top: 12px;
+  font-size: 0.93rem;
+  line-height: 1.5;
+  color: var(--error-texto);
+  background-color: var(--error-fondo);
+  border: 1px solid var(--error-borde);
+  border-radius: var(--radio);
+}
+
+.urgencia-sin-turno {
+  padding: 10px 12px;
+  color: var(--error-texto);
+  background-color: var(--error-fondo);
+  border: 1px solid var(--error-borde);
+  border-radius: var(--radio);
+}
+
+.boton-peligro-solido {
+  color: #fff;
+  background-color: #c0392b;
+  border-color: #c0392b;
+}
+
+.boton-peligro-solido:hover:not(:disabled) {
+  background-color: #a5281b;
+}
+
+.urgencia-estado {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.urgencia-estado h3 {
+  margin: 0 0 6px;
+}
+
+.urgencia-estado p {
+  margin: 4px 0;
+}
+
+.urgencia-buscando {
+  border-left: 5px solid #e0a100;
+}
+
+.urgencia-aceptada {
+  border-left: 5px solid var(--verde-600);
+}
+
+.pulso {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  margin-top: 6px;
+  background-color: #e0a100;
+  border-radius: 50%;
+  animation: urgencia-pulso 1.4s ease-in-out infinite;
+}
+
+@keyframes urgencia-pulso {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(224, 161, 0, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(224, 161, 0, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulso {
+    animation: none;
+  }
+}
+
+.urgencia-lista,
+.urgencia-historial {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.urgencia-item,
+.urgencia-historial li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-top: 1px solid var(--borde);
+}
+
+.urgencia-item p,
+.urgencia-historial p {
+  margin: 4px 0;
+}
+
+.etiqueta-urgencia-open {
+  color: #8a5a00;
+  background-color: #fff6e5;
+  border-color: #f5dcae;
+}
+
+.etiqueta-urgencia-accepted {
+  color: var(--verde-700);
+  background-color: var(--verde-50);
+  border-color: var(--verde-200);
+}
+
+.etiqueta-urgencia-completed {
+  color: var(--verde-700);
+  background-color: var(--verde-100);
+  border-color: var(--verde-200);
+}
+
+.etiqueta-urgencia-cancelled,
+.etiqueta-urgencia-expired {
+  color: var(--texto-suave);
+  background-color: #f1f4f2;
+  border-color: var(--borde);
 }

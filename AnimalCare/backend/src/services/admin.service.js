@@ -54,7 +54,7 @@ async function findUsers({ status, role, q, page = 1, pageSize = 20 }) {
 // Cuantos usuarios hay en cada estado (para los filtros del panel).
 async function countByStatus() {
   const grupos = await prisma.user.groupBy({ by: ["status"], _count: { _all: true } });
-  const totales = { PENDING: 0, ACTIVE: 0, SUSPENDED: 0, REJECTED: 0 };
+  const totales = { PENDING: 0, ACTIVE: 0, SUSPENDED: 0, REJECTED: 0, DELETED: 0 };
   grupos.forEach((grupo) => {
     totales[grupo.status] = grupo._count._all;
   });

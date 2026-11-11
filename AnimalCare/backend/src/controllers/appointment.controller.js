@@ -10,6 +10,7 @@ const appointmentService = require("../services/appointment.service");
 const vetService = require("../services/vet.service");
 const notificationService = require("../services/notification.service");
 const { findOwnActivePet } = require("./pet.controller");
+const { reabrirUrgencia } = require("./emergency.controller");
 const prisma = require("../prisma");
 const { parseId } = require("../utils/params");
 const {
@@ -203,7 +204,7 @@ async function createAppointment(req, res) {
 // GET /api/appointments
 // Cada usuario ve solo sus citas: el cliente las que agendo,
 // el veterinario las que le agendaron.
-// Filtros opcionales: ?date=AAAA-MM-DD (AN-17) y ?status=PENDING|CONFIRMED|CANCELLED|COMPLETED
+// Filtros opcionales: ?date=AAAA-MM-DD (AN-17) y ?status=PENDING|CONFIRMED|IN_PROGRESS|CANCELLED|COMPLETED
 async function listMyAppointments(req, res) {
   try {
     const { date, status } = req.query;
@@ -246,7 +247,7 @@ async function listMyAppointments(req, res) {
 
 // Estados desde los que una cita todavia se puede cancelar o modificar.
 const ACTIVE_STATUSES = ["PENDING", "CONFIRMED"];
-const ESTADOS_CITA = ["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED"];
+const ESTADOS_CITA = ["PENDING", "CONFIRMED", "IN_PROGRESS", "CANCELLED", "COMPLETED"];
 const MAX_REASON_LENGTH = 200;
 
 // Politica de cancelacion: el cliente puede cancelar hasta N horas antes.
@@ -287,6 +288,17 @@ async function cargarCitaPropia(req, res) {
   return appointment;
 }
 
+// La cita que nace de una urgencia se gestiona desde Urgencias, no desde la agenda.
+async function esDeUrgencia(res, appointment) {
+  const urgencia = await prisma.emergencyRequest.findFirst({ where: { appointmentId: appointment.id }, select: { id: true } });
+  if (!urgencia) return false;
+  res.status(409).json({
+    message: "Esta cita nació de una urgencia: se cierra o se libera desde la sección Urgencias.",
+    code: "EMERGENCY_APPOINTMENT",
+  });
+  return true;
+}
+
 function motivoOpcional(body) {
   const texto = body?.reason === undefined || body?.reason === null ? "" : String(body.reason).trim();
   return texto;
@@ -304,6 +316,7 @@ async function cancelAppointment(req, res) {
   try {
     const appointment = await cargarCitaPropia(req, res);
     if (!appointment) return undefined;
+    if (await esDeUrgencia(res, appointment)) return undefined;
 
     const motivo = motivoOpcional(req.body);
     if (motivo.length > MAX_REASON_LENGTH) {
@@ -318,6 +331,9 @@ async function cancelAppointment(req, res) {
     }
     if (appointment.status === "COMPLETED") {
       return res.status(409).json({ message: "No puedes cancelar una cita que ya fue atendida." });
+    }
+    if (appointment.status === "IN_PROGRESS") {
+      return res.status(409).json({ message: "La cita está en atención: se termina desde la historia clínica." });
     }
     if (appointment.scheduledAt.getTime() <= Date.now()) {
       return res.status(409).json({ message: "No puedes cancelar una cita cuya hora ya pasó." });
@@ -368,6 +384,7 @@ async function rescheduleAppointment(req, res) {
   try {
     const appointment = await cargarCitaPropia(req, res);
     if (!appointment) return undefined;
+    if (await esDeUrgencia(res, appointment)) return undefined;
 
     const { date, time } = req.body || {};
     const motivo = motivoOpcional(req.body);
@@ -469,6 +486,7 @@ async function confirmAppointment(req, res) {
   try {
     const appointment = await cargarCitaPropia(req, res);
     if (!appointment) return undefined;
+    if (await esDeUrgencia(res, appointment)) return undefined;
 
     if (appointment.status !== "PENDING") {
       return res.status(409).json({ message: "Solo se pueden confirmar citas pendientes." });
@@ -496,29 +514,100 @@ async function confirmAppointment(req, res) {
   }
 }
 
-// PATCH /api/appointments/:id/complete
-// AN-16: despues de la hora de la cita, el veterinario la marca como atendida.
+// PATCH /api/appointments/:id/start
+// El veterinario inicia la atencion: desde la hora de la cita, pasa a "en atencion"
+// y puede llenar la historia clinica de la mascota mientras la atiende.
+async function startAppointment(req, res) {
+  try {
+    const appointment = await cargarCitaPropia(req, res);
+    if (!appointment) return undefined;
+
+    if (appointment.status === "IN_PROGRESS") {
+      return res.status(200).json({
+        message: "La atención ya estaba iniciada.",
+        appointment: appointmentService.toPublicAppointment(appointment),
+      });
+    }
+    if (!ACTIVE_STATUSES.includes(appointment.status)) {
+      return res.status(409).json({ message: "Solo se puede iniciar la atención de citas pendientes o confirmadas." });
+    }
+    if (appointment.scheduledAt.getTime() > Date.now()) {
+      return res.status(409).json({ message: "Solo puedes iniciar la atención cuando llega la hora de la cita." });
+    }
+
+    const iniciada = await appointmentService.updateIfStatus(appointment.id, ACTIVE_STATUSES, {
+      status: "IN_PROGRESS",
+    });
+    if (!iniciada) {
+      return res.status(409).json({ message: "La cita cambió de estado. Actualiza la página." });
+    }
+    return res.status(200).json({
+      message: "Atención iniciada.",
+      appointment: appointmentService.toPublicAppointment(iniciada),
+    });
+  } catch (error) {
+    console.error("Error en startAppointment:", error);
+    return res.status(500).json({ message: "Ocurrio un error inesperado en el servidor." });
+  }
+}
+
+// PATCH /api/appointments/:id/complete   body: { skipRecord? }
+// AN-16: el veterinario termina la atencion. Si la cita tiene mascota, antes debe haber
+// registrado la consulta en la historia clinica (o terminar sin registrar a proposito).
+// Si la cita nacio de una urgencia, tambien se cierra la urgencia.
 async function completeAppointment(req, res) {
   try {
     const appointment = await cargarCitaPropia(req, res);
     if (!appointment) return undefined;
 
-    if (!ACTIVE_STATUSES.includes(appointment.status)) {
-      return res.status(409).json({ message: "Solo se pueden completar citas pendientes o confirmadas." });
+    if (appointment.status !== "IN_PROGRESS") {
+      return res.status(409).json({ message: "Inicia la atención de la cita antes de terminarla." });
     }
-    if (appointment.scheduledAt.getTime() > Date.now()) {
-      return res.status(409).json({ message: "Solo puedes marcar como atendida una cita cuya hora ya llegó." });
+    if (appointment.pet && !appointment.medicalRecord && req.body?.skipRecord !== true) {
+      return res.status(409).json({
+        message: "Registra la consulta en la historia clínica antes de terminar, o termina sin registrar.",
+        code: "RECORD_REQUIRED",
+      });
     }
 
-    const completada = await appointmentService.updateIfStatus(appointment.id, ACTIVE_STATUSES, {
+    // "Terminar sin registrar" una urgencia: el veterinario no la realizo, asi que vuelve a
+    // quedar disponible para otros (y su agenda se libera).
+    if (req.body?.skipRecord === true && !appointment.medicalRecord) {
+      const urgenciaAbierta = await prisma.emergencyRequest.findFirst({
+        where: { appointmentId: appointment.id, status: "ACCEPTED" },
+      });
+      if (urgenciaAbierta) {
+        if (!(await reabrirUrgencia(urgenciaAbierta, req.user))) {
+          return res.status(409).json({ message: "La urgencia cambió de estado. Actualiza la página." });
+        }
+        return res.status(200).json({
+          message: "La urgencia volvió a quedar disponible para otros veterinarios.",
+          reopened: true,
+        });
+      }
+    }
+
+    const completada = await appointmentService.updateIfStatus(appointment.id, ["IN_PROGRESS"], {
       status: "COMPLETED",
     });
     if (!completada) {
       return res.status(409).json({ message: "La cita cambió de estado. Actualiza la página." });
     }
 
+    const urgencia = await prisma.emergencyRequest.updateMany({
+      where: { appointmentId: appointment.id, status: "ACCEPTED" },
+      data: { status: "COMPLETED", closedAt: new Date() },
+    });
+    await avisar(
+      completada.clientId,
+      urgencia.count > 0
+        ? `${req.user.name} marcó tu urgencia como atendida. Si necesitas seguimiento, agenda una cita.`
+        : `${req.user.name} terminó la atención del ${cuando(completada)}.` +
+            (completada.pet ? ` Ya puedes ver la consulta de ${completada.pet.name} en su historia y calificar la cita.` : " Ya puedes calificar la cita.")
+    );
+
     return res.status(200).json({
-      message: "Cita marcada como atendida.",
+      message: "Atención terminada.",
       appointment: appointmentService.toPublicAppointment(completada),
     });
   } catch (error) {
@@ -608,5 +697,6 @@ module.exports = {
   cancelAppointment,
   rescheduleAppointment,
   confirmAppointment,
+  startAppointment,
   completeAppointment,
 };

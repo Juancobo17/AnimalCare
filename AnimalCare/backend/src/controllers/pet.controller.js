@@ -4,7 +4,7 @@
 // El dueño se toma SIEMPRE del token.
 const prisma = require("../prisma");
 const { parseId } = require("../utils/params");
-const { parseDate } = require("../utils/schedule");
+const { parseDate, toDateString } = require("../utils/schedule");
 
 const ESPECIES = ["Perro", "Gato", "Ave", "Conejo", "Roedor", "Reptil", "Otro"];
 const SEXOS = ["Macho", "Hembra"];
@@ -18,7 +18,7 @@ function toPublicPet(pet) {
     name: pet.name,
     species: pet.species,
     sex: pet.sex,
-    birthDate: pet.birthDate.toISOString().slice(0, 10),
+    birthDate: toDateString(pet.birthDate),
     weight: pet.weight === null ? null : Number(pet.weight),
   };
 }

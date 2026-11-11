@@ -10,7 +10,9 @@
 //   Veterinario:  confirmar, reprogramar, cancelar con motivo (AN-15, AN-16)
 //                 y marcar como atendida
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
+import Selector from "./Selector";
 import { MODALIDADES, obtenerHorarios } from "../services/vet.service";
 import {
   ESTADOS_CITA,
@@ -20,13 +22,17 @@ import {
   cancelarCita,
   reprogramarCita,
   confirmarCita,
+  iniciarCita,
   completarCita,
   calificarCita,
   clientePuedeCancelar,
   HORAS_MINIMAS_CANCELACION,
-  hoyUTC,
+  hoyLocal,
 } from "../services/appointment.service";
-import { ICONO_ESPECIE } from "../services/pet.service";
+import Icono from "./Icono";
+import { Star } from "lucide-react";
+import IconoEspecie from "./IconoEspecie";
+import Estrellas from "./Estrellas";
 import { obtenerMensajesDeError } from "../services/api";
 
 function FormularioReprogramar({ cita, onListo, onCerrar }) {
@@ -81,11 +87,11 @@ function FormularioReprogramar({ cita, onListo, onCerrar }) {
       <div className="fila">
         <div className="campo">
           <label htmlFor={`fecha-${cita.id}`}>Nueva fecha</label>
-          <input id={`fecha-${cita.id}`} type="date" min={hoyUTC()} value={fecha} onChange={(e) => elegirFecha(e.target.value)} />
+          <input id={`fecha-${cita.id}`} type="date" min={hoyLocal()} value={fecha} onChange={(e) => elegirFecha(e.target.value)} />
         </div>
         <div className="campo">
           <label htmlFor={`hora-${cita.id}`}>Nueva hora</label>
-          <select
+          <Selector
             id={`hora-${cita.id}`}
             value={hora}
             onChange={(e) => setHora(e.target.value)}
@@ -99,7 +105,7 @@ function FormularioReprogramar({ cita, onListo, onCerrar }) {
                 {h}
               </option>
             ))}
-          </select>
+          </Selector>
         </div>
       </div>
       <div className="campo">
@@ -155,7 +161,7 @@ function FormularioCalificar({ cita, onListo, onCerrar }) {
             className={n <= estrellas ? "estrella llena" : "estrella"}
             onClick={() => setEstrellas(n)}
           >
-            ★
+            <Star size={30} strokeWidth={1.8} aria-hidden="true" />
           </button>
         ))}
       </div>
@@ -197,12 +203,32 @@ function CitaTarjeta({ cita, perspectiva = "cliente", onActualizada }) {
   const fueraDePlazo = conAcciones && !esVistaDelVeterinario && esCancelable(cita) && !clientePuedeCancelar(cita);
   const calificable = conAcciones && !esVistaDelVeterinario && cita.status === "COMPLETED" && !cita.review;
   const confirmable = conAcciones && esVistaDelVeterinario && cancelable && cita.status === "PENDING";
+  // Iniciar la atencion: desde la hora de la cita. Con mascota lleva a la historia clinica.
   const completable = conAcciones && esVistaDelVeterinario && esCompletable(cita);
+  const enAtencion = conAcciones && esVistaDelVeterinario && cita.status === "IN_PROGRESS";
+  const navigate = useNavigate();
 
   // En atención a domicilio la dirección es la del cliente;
   // en la veterinaria, la del consultorio.
   // El veterinario ya conoce la direccion de su consultorio: solo ve la del cliente.
   const direccion = cita.mode === "HOME" ? cita.address : esVistaDelVeterinario ? null : cita.vet?.address;
+
+  async function iniciar() {
+    setProcesando(true);
+    setError("");
+    try {
+      const resultado = await iniciarCita(cita.id);
+      if (cita.pet) {
+        navigate(`/pacientes/${cita.pet.id}?cita=${cita.id}`);
+        return;
+      }
+      onActualizada(resultado);
+    } catch (e) {
+      setError(obtenerMensajesDeError(e).join(" "));
+    } finally {
+      setProcesando(false);
+    }
+  }
 
   async function ejecutar(accion) {
     setProcesando(true);
@@ -241,20 +267,33 @@ function CitaTarjeta({ cita, perspectiva = "cliente", onActualizada }) {
 
         {cita.pet && (
           <p className="texto-suave">
-            {ICONO_ESPECIE[cita.pet.species] || "🐾"} {cita.pet.name} ({cita.pet.species})
+            <IconoEspecie especie={cita.pet.species} tamano={16} /> {cita.pet.name} ({cita.pet.species})
+            {esVistaDelVeterinario && cita.status !== "CANCELLED" && (
+              <>
+                {" · "}
+                <Link to={`/pacientes/${cita.pet.id}`}>Ver historia clínica</Link>
+              </>
+            )}
           </p>
         )}
-        {direccion && <p className="texto-suave">📍 {direccion}</p>}
+        {direccion && (
+          <p className="texto-suave dato-icono">
+            <Icono nombre="ubicacion" tamano={15} grosor={2} />
+            {direccion}
+          </p>
+        )}
         {esVistaDelVeterinario && cita.client?.email && (
-          <p className="texto-suave">✉ {cita.client.email}</p>
+          <p className="texto-suave dato-icono">
+            <Icono nombre="correo" tamano={15} grosor={2} />
+            {cita.client.email}
+          </p>
         )}
         {cita.notes && <p className="cita-notas">“{cita.notes}”</p>}
 
         {cita.review && (
           <p className="cita-resena">
-            <span className="calificacion-estrellas" aria-label={`${cita.review.rating} de 5`}>
-              {"★".repeat(cita.review.rating)}
-              {"☆".repeat(5 - cita.review.rating)}
+            <span className="calificacion-estrellas" role="img" aria-label={`${cita.review.rating} de 5`}>
+              <Estrellas valor={cita.review.rating} />
             </span>
             {cita.review.comment && <span className="texto-suave"> “{cita.review.comment}”</span>}
           </p>
@@ -269,10 +308,45 @@ function CitaTarjeta({ cita, perspectiva = "cliente", onActualizada }) {
 
         {error && <p className="error-campo">{error}</p>}
 
+        {/* En atencion: volver a la historia clinica (con mascota) o terminar (sin mascota). */}
+        {enAtencion && (
+          <div className="cita-acciones">
+            {cita.pet ? (
+              <Link to={`/pacientes/${cita.pet.id}?cita=${cita.id}`} className="boton boton-primario boton-auto">
+                Continuar atención
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="boton boton-primario boton-auto"
+                disabled={procesando}
+                onClick={() => ejecutar(() => completarCita(cita.id))}
+              >
+                Terminar atención
+              </button>
+            )}
+          </div>
+        )}
+        {/* AN-18: una consulta ya atendida que quedo sin registrar se puede registrar despues. */}
+        {conAcciones && esVistaDelVeterinario && cita.pet && cita.status === "COMPLETED" && !cita.medicalRecordId && (
+          <div className="cita-acciones">
+            <Link to={`/pacientes/${cita.pet.id}?cita=${cita.id}`} className="boton boton-secundario boton-auto">
+              Registrar consulta en la historia
+            </Link>
+          </div>
+        )}
+        {esVistaDelVeterinario && cita.medicalRecordId && (
+          <p className="ayuda dato-icono">
+            <Icono nombre="check" tamano={14} grosor={2.6} />
+            Registrada en la historia clínica.
+          </p>
+        )}
+
         {panel === null && calificable && (
           <div className="cita-acciones">
             <button type="button" className="boton boton-primario boton-auto" onClick={() => setPanel("calificar")}>
-              ★ Calificar atención
+              <Star size={18} strokeWidth={2} aria-hidden="true" />
+              Calificar atención
             </button>
           </div>
         )}
@@ -305,9 +379,9 @@ function CitaTarjeta({ cita, perspectiva = "cliente", onActualizada }) {
                 type="button"
                 className="boton boton-primario boton-auto"
                 disabled={procesando}
-                onClick={() => ejecutar(() => completarCita(cita.id))}
+                onClick={iniciar}
               >
-                Marcar como atendida
+                Iniciar atención
               </button>
             )}
             {esVistaDelVeterinario && cancelable && (
@@ -365,7 +439,7 @@ function CitaTarjeta({ cita, perspectiva = "cliente", onActualizada }) {
         )}
       </div>
 
-      <span className={`etiqueta etiqueta-${cita.status.toLowerCase()}`}>
+      <span className={`etiqueta etiqueta-${cita.status === "IN_PROGRESS" ? "confirmed" : cita.status.toLowerCase()}`}>
         {ESTADOS_CITA[cita.status]}
       </span>
     </article>

@@ -1,9 +1,15 @@
-version: '3.8'
-
+# Entorno completo: base de datos, API y frontend (nginx).
+#   docker compose up --build
+# Frontend: http://localhost:8080   API: http://localhost:8080/api
+#
+# Cambia las contrasenas y JWT_SECRET antes de usarlo fuera de tu maquina.
 services:
   db:
     image: mysql:8.0
     restart: always
+    # Las migraciones mezclan `User` y `user`; Linux distingue mayusculas.
+    # Solo se aplica al crear el volumen: con uno existente, `docker compose down -v` primero.
+    command: --lower-case-table-names=1
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
       MYSQL_DATABASE: animalcare
@@ -11,18 +17,32 @@ services:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-prootpassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   backend:
     build: ./backend
     restart: always
-    ports:
-      - "3000:3000"
     environment:
       DATABASE_URL: "mysql://root:rootpassword@db:3306/animalcare"
-      PORT: 3000
-      JWT_SECRET: "animalcare_secret_key_2026"
+      PORT: 4000
+      JWT_SECRET: "cambia_esta_clave_antes_de_publicar"
+      JWT_EXPIRES_IN: "2h"
+      CLINIC_TIMEZONE: "America/Bogota"
+      # El frontend se sirve en 8080 y nginx reenvia /api al backend.
+      CORS_ORIGIN: "http://localhost:8080"
+      FRONTEND_URL: "http://localhost:8080"
+      TRUST_PROXY: "true"
+      # Correo: "console" imprime los correos en el log; "smtp" los envia (SMTP_URL, MAIL_FROM).
+      MAIL_TRANSPORT: "console"
+    volumes:
+      - uploads:/app/uploads
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   frontend:
     build: ./frontend
@@ -34,3 +54,4 @@ services:
 
 volumes:
   mysql_data:
+  uploads:

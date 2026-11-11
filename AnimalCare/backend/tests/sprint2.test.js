@@ -22,6 +22,7 @@ const bcrypt = require("bcrypt");
 const prisma = require("../src/prisma");
 const uploads = require("../src/utils/uploads");
 const { runReminders } = require("../src/services/reminder.service");
+const { toDateString, localWeekday, toTimeOfDay, parseTime } = require("../src/utils/schedule");
 
 const API = process.env.API_URL || `http://localhost:${process.env.PORT || 4000}/api`;
 const RUN = `${Date.now()}`.slice(-7);
@@ -85,6 +86,7 @@ function registroVeterinario(email, license, name = NOMBRE_VET) {
       name,
       email,
       password: CLAVE,
+      acceptPrivacy: true,
       role: "VETERINARIAN",
       license,
       specialty: "Dermatología",
@@ -100,7 +102,7 @@ function registroVeterinario(email, license, name = NOMBRE_VET) {
 before(async () => {
   // Si el cliente de Prisma no conoce las tablas del Sprint 2, la limpieza
   // final no podria borrar lo que se cree: se detiene antes de empezar.
-  if (!prisma.notification || !prisma.scheduleBlock || !prisma.review) {
+  if (!prisma.notification || !prisma.scheduleBlock || !prisma.review || !prisma.medicalRecord || !prisma.medicalAttachment || !prisma.emergencyRequest) {
     throw new Error("El cliente de Prisma está desactualizado. Ejecuta `npx prisma generate` y reinicia el backend.");
   }
 
@@ -125,7 +127,7 @@ before(async () => {
 
   for (const clave of ["clienteA", "clienteB"]) {
     const r = await http("POST", "/auth/register", {
-      body: { name: `Cliente ${clave} QA`, email: ctx.emails[clave], password: CLAVE },
+      body: { name: `Cliente ${clave} QA`, email: ctx.emails[clave], password: CLAVE, acceptPrivacy: true },
     });
     assert.equal(r.status, 201, errores(r));
   }
@@ -145,17 +147,30 @@ before(async () => {
 
 after(async () => {
   const usuarios = await prisma.user.findMany({
-    where: { email: { startsWith: PREFIJO } },
+    // Una cuenta eliminada cambia de correo: se busca tambien por el id que creo la prueba.
+    where: { OR: [{ email: { startsWith: PREFIJO } }, { id: { in: ctx.creados || [] } }] },
     include: { vetProfile: true },
   });
   const userIds = usuarios.map((u) => u.id);
   const vetIds = usuarios.filter((u) => u.vetProfile).map((u) => u.vetProfile.id);
 
   await prisma.notification.deleteMany({ where: { userId: { in: userIds } } });
+  await prisma.authToken.deleteMany({ where: { userId: { in: userIds } } });
+  const adjuntos = await prisma.medicalAttachment.findMany({
+    where: { record: { OR: [{ pet: { userId: { in: userIds } } }, { vetProfileId: { in: vetIds } }] } },
+  });
+  for (const adjunto of adjuntos) await uploads.deleteRecordFile(adjunto.storedName);
+  await prisma.medicalAttachment.deleteMany({ where: { id: { in: adjuntos.map((a) => a.id) } } });
+  await prisma.medicalRecord.deleteMany({
+    where: { OR: [{ pet: { userId: { in: userIds } } }, { vetProfileId: { in: vetIds } }] },
+  });
   await prisma.review.deleteMany({
     where: { OR: [{ clientId: { in: userIds } }, { vetProfileId: { in: vetIds } }] },
   });
   await prisma.appointment.deleteMany({
+    where: { OR: [{ clientId: { in: userIds } }, { vetProfileId: { in: vetIds } }] },
+  });
+  await prisma.emergencyRequest.deleteMany({
     where: { OR: [{ clientId: { in: userIds } }, { vetProfileId: { in: vetIds } }] },
   });
   await prisma.pet.deleteMany({ where: { userId: { in: userIds } } });
@@ -308,6 +323,7 @@ describe("AN-35 y AN-38: verificacion de veterinarios y listado de usuarios", ()
   test("al rechazar, la cuenta queda denegada y no puede iniciar sesion (criterio 3)", async () => {
     const reg = await registroVeterinario(ctx.emails.vet2, `QB${RUN}`, `Vet Rechazado ${RUN}`);
     assert.equal(reg.status, 201, errores(reg));
+    ctx.vet2Id = reg.data.user.id;
     const r = await http("PATCH", `/admin/users/${reg.data.user.id}/reject`, { token: ctx.admin });
     assert.equal(r.status, 200);
     assert.equal(r.data.user.status, "REJECTED");
@@ -722,6 +738,11 @@ describe("AN-16: el veterinario modifica las citas de su agenda", () => {
       data: { scheduledAt: new Date(Date.now() - 60 * 60 * 1000) },
     });
 
+    // Se inicia la atencion y luego se termina (una cita sin mascota no pide historia clinica).
+    assert.equal((await http("PATCH", `/appointments/${cita.data.appointment.id}/complete`, { token: ctx.vet })).status, 409);
+    const inicio = await http("PATCH", `/appointments/${cita.data.appointment.id}/start`, { token: ctx.vet });
+    assert.equal(inicio.status, 200, errores(inicio));
+    assert.equal(inicio.data.appointment.status, "IN_PROGRESS");
     const r = await http("PATCH", `/appointments/${cita.data.appointment.id}/complete`, { token: ctx.vet });
     assert.equal(r.status, 200, errores(r));
     assert.equal(r.data.appointment.status, "COMPLETED");
@@ -920,7 +941,13 @@ describe("Mejora: resenas despues de una cita atendida", () => {
       where: { id: ctx.citaResena },
       data: { scheduledAt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
     });
-    assert.equal((await http("PATCH", `/appointments/${ctx.citaResena}/complete`, { token: ctx.vet })).status, 200);
+    assert.equal((await http("PATCH", `/appointments/${ctx.citaResena}/start`, { token: ctx.vet })).status, 200);
+    // Con mascota, terminar pide la historia clinica o terminar sin registrar a proposito.
+    assert.equal((await http("PATCH", `/appointments/${ctx.citaResena}/complete`, { token: ctx.vet })).status, 409);
+    assert.equal(
+      (await http("PATCH", `/appointments/${ctx.citaResena}/complete`, { token: ctx.vet, body: { skipRecord: true } })).status,
+      200
+    );
 
     const invalida = await http("POST", `/appointments/${ctx.citaResena}/review`, {
       token: ctx.clienteA,
@@ -960,6 +987,474 @@ describe("Mejora: resenas despues de una cita atendida", () => {
   });
 });
 
+// ======================= Sprint 3: historias clinicas =======================
+
+// Cita ya empezada (en curso) del veterinario con una mascota: de ahi sale cada entrada.
+// Por defecto queda COMPLETED para no ocupar la agenda en las pruebas de urgencias (que dependen de la hora actual).
+async function citaEnCurso(petId, estado = "COMPLETED", clienteEmail = ctx.emails.clienteA) {
+  const cliente = await prisma.user.findUnique({ where: { email: clienteEmail } });
+  return prisma.appointment.create({
+    data: {
+      mode: "CLINIC",
+      scheduledAt: new Date(Date.now() - 10 * 60 * 1000),
+      durationMinutes: 30,
+      status: estado,
+      clientId: cliente.id,
+      vetProfileId: ctx.vetProfileId,
+      petId,
+    },
+  });
+}
+
+describe("AN-18: crear historia clinica", () => {
+  test("un veterinario sin citas con la mascota no puede verla ni escribir en ella", async () => {
+    const rocky = await http("POST", "/pets", {
+      token: ctx.clienteA,
+      body: { name: "Rocky", species: "Perro", sex: "Macho", birthDate: "2020-01-15" },
+    });
+    assert.equal(rocky.status, 201, errores(rocky));
+    ctx.rocky = rocky.data.pet.id;
+
+    assert.equal((await http("GET", `/medical-records/pets/${ctx.rocky}`, { token: ctx.vet })).status, 404);
+    const r = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.rocky, appointmentId: ctx.citaResena, reason: "Control", diagnosis: "Sano" },
+    });
+    assert.equal(r.status, 404);
+  });
+
+  test("valida los campos obligatorios y los rangos", async () => {
+    const vacio = await http("POST", "/medical-records", { token: ctx.vet, body: { petId: ctx.mascota } });
+    assert.equal(vacio.status, 400);
+    assert.equal(vacio.data.errors.length, 3, "motivo, diagnostico y cita");
+    const cita = await citaEnCurso(ctx.mascota);
+    const fiebre = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, appointmentId: cita.id, reason: "Fiebre", diagnosis: "x", temperature: "50" },
+    });
+    assert.equal(fiebre.status, 400);
+    const futura = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, appointmentId: cita.id, reason: "x", diagnosis: "x", visitDate: "2099-01-01" },
+    });
+    assert.equal(futura.status, 400);
+  });
+
+  test("el veterinario registra la consulta de una cita atendida y se avisa al dueño", async () => {
+    const r = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: {
+        petId: ctx.mascota,
+        appointmentId: ctx.citaResena,
+        reason: "Vómito ocasional",
+        diagnosis: "Gastritis leve",
+        treatment: "Dieta blanda por 3 días",
+        weight: "4.8",
+        temperature: "38.6",
+        vaccines: "Triple felina (refuerzo)",
+      },
+    });
+    assert.equal(r.status, 201, errores(r));
+    assert.equal(r.data.record.appointmentId, ctx.citaResena);
+    assert.equal(r.data.record.canEdit, true);
+    ctx.entrada = r.data.record.id;
+
+    // El peso medido pasa a ser el peso actual de la mascota.
+    const mascotas = await http("GET", "/pets", { token: ctx.clienteA });
+    assert.equal(mascotas.data.pets.find((p) => p.id === ctx.mascota).weight, 4.8);
+
+    const avisos = await http("GET", "/notifications", { token: ctx.clienteA });
+    assert.match(avisos.data.notifications[0].message, /agregó una entrada a la historia clínica de Michi/);
+
+    const citas = await http("GET", "/appointments", { token: ctx.vet });
+    assert.equal(citas.data.appointments.find((c) => c.id === ctx.citaResena).medicalRecordId, ctx.entrada);
+  });
+
+  test("una cita solo admite una entrada", async () => {
+    const r = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, appointmentId: ctx.citaResena, reason: "x", diagnosis: "x" },
+    });
+    assert.equal(r.status, 409);
+  });
+
+  test("toda entrada pertenece a una cita: sin cita no se registra", async () => {
+    const r = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, reason: "Llamada de seguimiento", diagnosis: "Evoluciona bien" },
+    });
+    assert.equal(r.status, 400);
+    assert.match(r.data.errors.join(" "), /debe pertenecer a una cita/);
+  });
+
+  test("la consulta se registra mientras la cita esta en curso, sin esperar a que termine", async () => {
+    const cita = await citaEnCurso(ctx.mascota, "IN_PROGRESS");
+    const r = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, appointmentId: cita.id, reason: "Control en consulta", diagnosis: "Evoluciona bien" },
+    });
+    assert.equal(r.status, 201, errores(r));
+    assert.equal(r.data.record.appointmentId, cita.id);
+    ctx.entrada2 = r.data.record.id;
+    await prisma.appointment.update({ where: { id: cita.id }, data: { status: "COMPLETED" } }); // libera la agenda
+
+    // Una cita que todavia no empieza no admite la entrada.
+    const futura = await prisma.appointment.create({
+      data: {
+        mode: "CLINIC",
+        scheduledAt: new Date(Date.now() + 3 * 60 * 60 * 1000),
+        durationMinutes: 30,
+        status: "CONFIRMED",
+        clientId: cita.clientId,
+        vetProfileId: ctx.vetProfileId,
+        petId: ctx.mascota,
+      },
+    });
+    const antes = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, appointmentId: futura.id, reason: "x", diagnosis: "x" },
+    });
+    assert.equal(antes.status, 409);
+    assert.match(antes.data.message, /Inicia la atención/);
+  });
+
+  test("un cliente no puede escribir en la historia", async () => {
+    const r = await http("POST", "/medical-records", {
+      token: ctx.clienteA,
+      body: { petId: ctx.mascota, reason: "x", diagnosis: "x" },
+    });
+    assert.equal(r.status, 403);
+  });
+});
+
+describe("Atencion de la cita: iniciar, llenar la historia clinica y terminar", () => {
+  const empezar = (id) => http("PATCH", `/appointments/${id}/start`, { token: ctx.vet });
+  const terminar = (id, body) => http("PATCH", `/appointments/${id}/complete`, { token: ctx.vet, body });
+  const registrar = (cita, extra = {}) =>
+    http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, appointmentId: cita.id, reason: "Control", diagnosis: "Sano", ...extra },
+    });
+
+  test("no se inicia una cita que aun no llega, ni se registra ni se termina sin iniciarla", async () => {
+    const futura = await prisma.appointment.create({
+      data: {
+        mode: "CLINIC",
+        scheduledAt: new Date(Date.now() + 5 * 60 * 60 * 1000),
+        durationMinutes: 30,
+        status: "CONFIRMED",
+        clientId: (await prisma.user.findUnique({ where: { email: ctx.emails.clienteA } })).id,
+        vetProfileId: ctx.vetProfileId,
+        petId: ctx.mascota,
+      },
+    });
+    assert.equal((await empezar(futura.id)).status, 409);
+
+    const sinIniciar = await citaEnCurso(ctx.mascota, "CONFIRMED");
+    assert.equal((await registrar(sinIniciar)).status, 409, "la historia se llena despues de iniciar");
+    assert.equal((await terminar(sinIniciar.id)).status, 409, "no se termina sin iniciar");
+    await prisma.appointment.update({ where: { id: sinIniciar.id }, data: { status: "COMPLETED" } });
+    await prisma.appointment.update({ where: { id: futura.id }, data: { status: "CANCELLED" } });
+  });
+
+  test("al iniciar, la cita queda en atencion y no se cancela ni se reagenda", async () => {
+    const cita = await citaEnCurso(ctx.mascota, "CONFIRMED");
+    const r = await empezar(cita.id);
+    assert.equal(r.status, 200, errores(r));
+    assert.equal(r.data.appointment.status, "IN_PROGRESS");
+    assert.equal((await empezar(cita.id)).status, 200, "iniciar de nuevo es inofensivo (Continuar atencion)");
+
+    assert.equal((await http("PATCH", `/appointments/${cita.id}/cancel`, { token: ctx.vet })).status, 409);
+    assert.equal(
+      (await http("PATCH", `/appointments/${cita.id}/reschedule`, { token: ctx.vet, body: { date: VIERNES, time: "09:00" } })).status,
+      409
+    );
+
+    const historia = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.vet });
+    const enCurso = historia.data.inProgressAppointments.find((c) => c.id === cita.id);
+    assert.deepEqual({ status: enCurso.status, recordId: enCurso.recordId }, { status: "IN_PROGRESS", recordId: null });
+    ctx.citaAtencion = cita;
+  });
+
+  test("guardar avance y terminar: pide la historia clinica antes de cerrar y avisa al dueño", async () => {
+    const cita = ctx.citaAtencion;
+    const sinHistoria = await terminar(cita.id);
+    assert.equal(sinHistoria.status, 409);
+    assert.equal(sinHistoria.data.code, "RECORD_REQUIRED");
+
+    const avance = await registrar(cita, { diagnosis: "En observacion" });
+    assert.equal(avance.status, 201, errores(avance));
+    // El avance se puede seguir editando mientras la cita esta en atencion.
+    const historia = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.vet });
+    assert.equal(historia.data.inProgressAppointments.find((c) => c.id === cita.id).recordId, avance.data.record.id);
+    const editar = await http("PUT", `/medical-records/${avance.data.record.id}`, {
+      token: ctx.vet,
+      body: { reason: "Control", diagnosis: "Recuperado", treatment: "Reposo" },
+    });
+    assert.equal(editar.status, 200, errores(editar));
+
+    const fin = await terminar(cita.id);
+    assert.equal(fin.status, 200, errores(fin));
+    assert.equal(fin.data.appointment.status, "COMPLETED");
+    const avisos = await http("GET", "/notifications", { token: ctx.clienteA });
+    assert.match(avisos.data.notifications[0].message, /terminó la atención/);
+    assert.equal((await terminar(cita.id)).status, 409, "ya terminada");
+    // Se anula para no alterar el conteo de entradas de las pruebas siguientes.
+    const anulada = await http("PATCH", `/medical-records/${avance.data.record.id}/annul`, {
+      token: ctx.vet,
+      body: { reason: "Entrada de prueba del flujo de atencion" },
+    });
+    assert.equal(anulada.status, 200, errores(anulada));
+  });
+
+  test("terminar sin registrar es una decision explicita", async () => {
+    const cita = await citaEnCurso(ctx.mascota, "IN_PROGRESS");
+    assert.equal((await terminar(cita.id)).status, 409);
+    const r = await terminar(cita.id, { skipRecord: true });
+    assert.equal(r.status, 200, errores(r));
+  });
+});
+
+describe("AN-21: el dueño accede a la historia clinica de su mascota", () => {
+  test("ve las entradas de su mascota, de la mas reciente a la mas antigua", async () => {
+    const r = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.clienteA });
+    assert.equal(r.status, 200, errores(r));
+    assert.equal(r.data.pet.name, "Michi");
+    assert.equal(r.data.records.length, 2);
+    const primera = r.data.records.find((e) => e.id === ctx.entrada);
+    assert.equal(primera.diagnosis, "Gastritis leve");
+    assert.equal(primera.vet.name, NOMBRE_VET);
+    assert.ok(!("status" in primera), "el dueño no ve datos internos de auditoria");
+  });
+
+  test("otro cliente no puede ver la historia", async () => {
+    assert.equal((await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.clienteB })).status, 404);
+  });
+
+  test("el veterinario ve ademas sus citas pasadas sin registrar", async () => {
+    const r = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.vet });
+    assert.equal(r.status, 200);
+    assert.ok(Array.isArray(r.data.pendingAppointments));
+    assert.ok(!r.data.pendingAppointments.some((c) => c.id === ctx.citaResena), "la cita ya registrada no aparece");
+  });
+});
+
+describe("AN-20: modificar historia clinica", () => {
+  test("el autor modifica su entrada", async () => {
+    const r = await http("PUT", `/medical-records/${ctx.entrada}`, {
+      token: ctx.vet,
+      body: { reason: "Vómito ocasional", diagnosis: "Gastritis leve por cambio de alimento", treatment: "Dieta blanda" },
+    });
+    assert.equal(r.status, 200, errores(r));
+    assert.equal(r.data.record.diagnosis, "Gastritis leve por cambio de alimento");
+  });
+
+  test("otro veterinario que atiende a la mascota ve la historia pero no puede modificarla", async () => {
+    // Se habilita un segundo veterinario y la mascota tiene cita con el.
+    assert.equal((await http("PATCH", `/admin/users/${ctx.vet2Id}/approve`, { token: ctx.admin })).status, 200);
+    const perfil2 = await http("GET", `/vets?q=${encodeURIComponent(`Vet Rechazado ${RUN}`)}`, { token: ctx.clienteA });
+    const cita = await http("POST", "/appointments", {
+      token: ctx.clienteA,
+      body: { vetProfileId: perfil2.data.vets[0].id, petId: ctx.mascota, mode: "CLINIC", date: JUEVES, time: "09:00" },
+    });
+    assert.equal(cita.status, 201, errores(cita));
+    const vet2 = await tokenDe(ctx.emails.vet2);
+
+    const historia = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: vet2 });
+    assert.equal(historia.status, 200);
+    assert.equal(historia.data.records.find((e) => e.id === ctx.entrada).canEdit, false);
+
+    const r = await http("PUT", `/medical-records/${ctx.entrada}`, {
+      token: vet2,
+      body: { reason: "x", diagnosis: "x" },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test("el cliente no puede modificar entradas", async () => {
+    const r = await http("PUT", `/medical-records/${ctx.entrada}`, {
+      token: ctx.clienteA,
+      body: { reason: "x", diagnosis: "x" },
+    });
+    assert.equal(r.status, 403);
+  });
+});
+
+describe("AN-19: eliminar historia clinica", () => {
+  test("pide un motivo para eliminar", async () => {
+    const r = await http("PATCH", `/medical-records/${ctx.entrada2}/annul`, { token: ctx.vet, body: {} });
+    assert.equal(r.status, 400);
+  });
+
+  test("al eliminar, el dueño deja de verla y el veterinario la ve anulada con su motivo", async () => {
+    const r = await http("PATCH", `/medical-records/${ctx.entrada2}/annul`, {
+      token: ctx.vet,
+      body: { reason: "Registrada por error en otra mascota" },
+    });
+    assert.equal(r.status, 200, errores(r));
+    assert.equal(r.data.record.status, "ANNULLED");
+
+    const dueño = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.clienteA });
+    assert.deepEqual(dueño.data.records.map((e) => e.id), [ctx.entrada]);
+
+    const vet = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.vet });
+    const anulada = vet.data.records.find((e) => e.id === ctx.entrada2);
+    assert.deepEqual(
+      { status: anulada.status, annulReason: anulada.annulReason, canEdit: anulada.canEdit },
+      { status: "ANNULLED", annulReason: "Registrada por error en otra mascota", canEdit: false }
+    );
+  });
+
+  test("una entrada eliminada no se puede modificar ni volver a eliminar", async () => {
+    const editar = await http("PUT", `/medical-records/${ctx.entrada2}`, {
+      token: ctx.vet,
+      body: { reason: "x", diagnosis: "x" },
+    });
+    assert.equal(editar.status, 409);
+    const otraVez = await http("PATCH", `/medical-records/${ctx.entrada2}/annul`, {
+      token: ctx.vet,
+      body: { reason: "x" },
+    });
+    assert.equal(otraVez.status, 409);
+  });
+});
+
+describe("Adjuntos de la historia clinica (extiende AN-18 y AN-21)", () => {
+  // PDF minimo valido para la firma (%PDF), con un marcador para reconocerlo.
+  const pdfDe = (marca) => `data:application/pdf;base64,${Buffer.from(`%PDF-1.4\n%${marca}\n%%EOF`).toString("base64")}`;
+  const bajar = (token, id) => fetch(`${API}/medical-records/attachments/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+
+  test("un cliente no puede adjuntar archivos", async () => {
+    const r = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: ctx.clienteA,
+      body: { file: pdfDe("x"), name: "examen.pdf" },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test("rechaza formatos no permitidos, archivos falsos y archivos muy grandes", async () => {
+    const gif = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: ctx.vet,
+      body: { file: "data:image/gif;base64,R0lGODlhAQABAAAAACw=" },
+    });
+    assert.equal(gif.status, 400);
+
+    const falso = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: ctx.vet,
+      body: { file: `data:application/pdf;base64,${Buffer.from("esto no es un pdf").toString("base64")}` },
+    });
+    assert.equal(falso.status, 400);
+
+    const grande = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(5 * 1024 * 1024)]);
+    const r = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: ctx.vet,
+      body: { file: `data:application/pdf;base64,${grande.toString("base64")}` },
+    });
+    assert.equal(r.status, 400);
+    assert.match(errores(r), /no puede pesar más de 5 MB/);
+  });
+
+  test("el veterinario adjunta un PDF y una imagen; el nombre se limpia", async () => {
+    const pdf = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: ctx.vet,
+      body: { file: pdfDe("hemograma"), name: "../../Hemograma Michi.pdf" },
+    });
+    assert.equal(pdf.status, 201, errores(pdf));
+    assert.equal(pdf.data.attachment.name, "Hemograma Michi.pdf");
+    assert.equal(pdf.data.attachment.type, "application/pdf");
+    ctx.adjuntoPdf = pdf.data.attachment.id;
+
+    const img = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: ctx.vet,
+      body: { file: PNG_1X1, name: "radiografia.png" },
+    });
+    assert.equal(img.status, 201, errores(img));
+    ctx.adjuntoImg = img.data.attachment.id;
+  });
+
+  test("la historia lista los adjuntos sin exponer rutas de disco, al dueño y al veterinario", async () => {
+    for (const token of [ctx.clienteA, ctx.vet]) {
+      const r = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token });
+      const entrada = r.data.records.find((e) => e.id === ctx.entrada);
+      assert.deepEqual(
+        entrada.attachments.map((a) => [a.name, a.type]),
+        [["Hemograma Michi.pdf", "application/pdf"], ["radiografia.png", "image/png"]]
+      );
+      assert.ok(entrada.attachments.every((a) => a.size > 0 && !("storedName" in a)));
+    }
+  });
+
+  test("el dueño descarga el archivo; otros no", async () => {
+    const dueño = await bajar(ctx.clienteA, ctx.adjuntoPdf);
+    assert.equal(dueño.status, 200);
+    assert.equal(dueño.headers.get("content-type"), "application/pdf");
+    assert.match(dueño.headers.get("cache-control"), /no-store/);
+    assert.match(Buffer.from(await dueño.arrayBuffer()).toString(), /%hemograma/);
+
+    assert.equal((await bajar(ctx.vet, ctx.adjuntoImg)).status, 200);
+    assert.equal((await bajar(ctx.clienteB, ctx.adjuntoPdf)).status, 404, "otro cliente");
+    assert.equal((await bajar(ctx.admin, ctx.adjuntoPdf)).status, 403, "el administrador no accede a historias");
+    assert.equal((await fetch(`${API}/medical-records/attachments/${ctx.adjuntoPdf}`)).status, 401, "sin sesion");
+    assert.equal((await fetch(API.replace(/\/api$/, "") + "/uploads/records/cualquiera.pdf")).status, 404, "no hay ruta publica");
+  });
+
+  test("otro veterinario ve el archivo pero no puede agregar ni quitar", async () => {
+    const vet2 = await tokenDe(ctx.emails.vet2);
+    assert.equal((await bajar(vet2, ctx.adjuntoPdf)).status, 200);
+    const agregar = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: vet2,
+      body: { file: pdfDe("intruso") },
+    });
+    assert.equal(agregar.status, 403);
+    const quitar = await http("DELETE", `/medical-records/attachments/${ctx.adjuntoPdf}`, { token: vet2 });
+    assert.equal(quitar.status, 403);
+  });
+
+  test("una entrada admite hasta 10 archivos", async () => {
+    const actuales = (await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.vet })).data.records.find(
+      (e) => e.id === ctx.entrada
+    ).attachments.length;
+    for (let i = actuales; i < 10; i += 1) {
+      const r = await http("POST", `/medical-records/${ctx.entrada}/attachments`, { token: ctx.vet, body: { file: pdfDe(`n${i}`) } });
+      assert.equal(r.status, 201, errores(r));
+    }
+    const once = await http("POST", `/medical-records/${ctx.entrada}/attachments`, { token: ctx.vet, body: { file: pdfDe("once") } });
+    assert.equal(once.status, 409);
+  });
+
+  test("el autor elimina un archivo: desaparece de la lista y del disco", async () => {
+    const fila = await prisma.medicalAttachment.findUnique({ where: { id: ctx.adjuntoImg } });
+    const ruta = require("../src/utils/uploads").recordFileAbsolutePath(fila.storedName);
+    assert.ok(require("node:fs").existsSync(ruta), "el archivo existe antes de eliminar");
+
+    assert.equal((await http("DELETE", `/medical-records/attachments/${ctx.adjuntoImg}`, { token: ctx.clienteA })).status, 403);
+    const r = await http("DELETE", `/medical-records/attachments/${ctx.adjuntoImg}`, { token: ctx.vet });
+    assert.equal(r.status, 200, errores(r));
+    assert.ok(!require("node:fs").existsSync(ruta), "el archivo ya no esta en disco");
+    assert.equal((await bajar(ctx.clienteA, ctx.adjuntoImg)).status, 404);
+  });
+
+  test("al eliminar la entrada, el dueño deja de ver sus archivos y no se pueden agregar mas", async () => {
+    const citaExamenes = await citaEnCurso(ctx.mascota);
+    const nueva = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, appointmentId: citaExamenes.id, reason: "Control con examenes", diagnosis: "En revision" },
+    });
+    assert.equal(nueva.status, 201, errores(nueva));
+    const adj = await http("POST", `/medical-records/${nueva.data.record.id}/attachments`, {
+      token: ctx.vet,
+      body: { file: pdfDe("anulada"), name: "examen.pdf" },
+    });
+    assert.equal(adj.status, 201, errores(adj));
+
+    await http("PATCH", `/medical-records/${nueva.data.record.id}/annul`, { token: ctx.vet, body: { reason: "Prueba de adjuntos" } });
+    assert.equal((await bajar(ctx.clienteA, adj.data.attachment.id)).status, 404, "el dueño ya no lo ve");
+    assert.equal((await bajar(ctx.vet, adj.data.attachment.id)).status, 200, "el veterinario si, para auditoria");
+    const mas = await http("POST", `/medical-records/${nueva.data.record.id}/attachments`, { token: ctx.vet, body: { file: pdfDe("otro") } });
+    assert.equal(mas.status, 409);
+  });
+});
+
 describe("Mejora: buscador con filtros, orden y proximo turno", () => {
   test("cada veterinario trae su proximo turno libre", async () => {
     const servicio = await http("POST", "/vets/me/services", {
@@ -977,7 +1472,10 @@ describe("Mejora: buscador con filtros, orden y proximo turno", () => {
 
   test("filtra por zona del consultorio", async () => {
     const r = await http("GET", `/vets?zone=QA${RUN}`, { token: ctx.clienteB });
-    assert.deepEqual(r.data.vets.map((v) => v.id), [ctx.vetProfileId]);
+    assert.ok(r.data.vets.some((v) => v.id === ctx.vetProfileId));
+    assert.ok(r.data.vets.every((v) => v.address.includes(`QA${RUN}`)));
+    const otraZona = await http("GET", "/vets?zone=zona-que-no-existe", { token: ctx.clienteB });
+    assert.equal(otraZona.data.total, 0);
   });
 
   test("filtra por precio maximo", async () => {
@@ -994,7 +1492,7 @@ describe("Mejora: buscador con filtros, orden y proximo turno", () => {
   });
 
   test("'atiende hoy' solo deja a quienes tienen turno hoy", async () => {
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = toDateString(new Date());
     const r = await http("GET", "/vets?today=true", { token: ctx.clienteB });
     assert.ok(r.data.vets.every((v) => v.nextSlot && v.nextSlot.date === hoy));
   });
@@ -1117,6 +1615,575 @@ describe("Mejora: paginacion del panel de administracion", () => {
   test("pagina o tamano invalidos responden 400", async () => {
     assert.equal((await http("GET", "/admin/users?page=0", { token: ctx.admin })).status, 400);
     assert.equal((await http("GET", "/admin/users?pageSize=500", { token: ctx.admin })).status, 400);
+  });
+});
+
+// ======================= Cuentas y seguridad =======================
+
+const fs = require("node:fs");
+
+// Ultimo correo enviado a una direccion (el backend los escribe en MAIL_OUTBOX_FILE).
+function ultimoCorreo(para) {
+  const archivo = process.env.MAIL_OUTBOX_FILE;
+  if (!archivo || !fs.existsSync(archivo)) return null;
+  const lineas = fs.readFileSync(archivo, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  return lineas.reverse().find((c) => c.to === para) || null;
+}
+function tokenDelCorreo(correo) {
+  return /token=([0-9a-f]{64})/.exec(correo?.text || "")?.[1] || null;
+}
+
+describe("Cuenta: consentimiento y verificacion de correo", () => {
+  test("el registro exige aceptar la politica de privacidad", async () => {
+    const r = await http("POST", "/auth/register", {
+      body: { name: "Sin consentimiento", email: `${PREFIJO}.sinc@test.com`, password: CLAVE },
+    });
+    assert.equal(r.status, 400);
+    assert.match(errores(r), /política de privacidad/);
+  });
+
+  test("al registrarse se envia un correo de verificacion y el enlace confirma el correo", async (t) => {
+    if (!process.env.MAIL_OUTBOX_FILE) {
+      t.skip("MAIL_OUTBOX_FILE no definido: no se puede leer el correo enviado");
+      return;
+    }
+    const correo = ultimoCorreo(ctx.emails.clienteB);
+    assert.ok(correo, "deberia haber un correo de verificacion");
+    const token = tokenDelCorreo(correo);
+    assert.ok(token);
+
+    const antes = await http("GET", "/auth/me", { token: ctx.clienteB });
+    assert.equal(antes.data.user.emailVerified, false);
+
+    const r = await http("POST", "/auth/verify-email", { body: { token } });
+    assert.equal(r.status, 200, errores(r));
+    const despues = await http("GET", "/auth/me", { token: ctx.clienteB });
+    assert.equal(despues.data.user.emailVerified, true);
+
+    // El enlace es de un solo uso.
+    assert.equal((await http("POST", "/auth/verify-email", { body: { token } })).status, 400);
+    assert.equal((await http("POST", "/account/resend-verification", { token: ctx.clienteB })).status, 409);
+  });
+
+  test("un enlace invalido responde 400", async () => {
+    assert.equal((await http("POST", "/auth/verify-email", { body: { token: "abc" } })).status, 400);
+  });
+});
+
+describe("Cuenta: recuperar contrasena", () => {
+  test("responde igual exista o no el correo, y solo crea token para correos registrados", async () => {
+    const antes = await prisma.authToken.count({ where: { purpose: "PASSWORD_RESET" } });
+    const existe = await http("POST", "/auth/forgot-password", { body: { email: ctx.emails.clienteA } });
+    const noExiste = await http("POST", "/auth/forgot-password", { body: { email: `${PREFIJO}.nadie@test.com` } });
+    assert.equal(existe.status, 200);
+    assert.equal(noExiste.status, 200);
+    assert.equal(existe.data.message, noExiste.data.message);
+    const despues = await prisma.authToken.count({ where: { purpose: "PASSWORD_RESET" } });
+    assert.equal(despues - antes, 1);
+  });
+
+  test("con el enlace del correo se cambia la contrasena y el enlace deja de servir", async (t) => {
+    if (!process.env.MAIL_OUTBOX_FILE) {
+      t.skip("MAIL_OUTBOX_FILE no definido");
+      return;
+    }
+    const token = tokenDelCorreo(ultimoCorreo(ctx.emails.clienteA));
+    assert.ok(token, "deberia haber un correo de recuperacion");
+
+    const debil = await http("POST", "/auth/reset-password", { body: { token, password: "abc" } });
+    assert.equal(debil.status, 400);
+
+    const r = await http("POST", "/auth/reset-password", { body: { token, password: "nueva123" } });
+    assert.equal(r.status, 200, errores(r));
+    assert.equal((await login(ctx.emails.clienteA, CLAVE)).status, 401);
+    assert.equal((await login(ctx.emails.clienteA, "nueva123")).status, 200);
+    assert.equal((await http("POST", "/auth/reset-password", { body: { token, password: "otra123" } })).status, 400);
+
+    // Se deja como estaba para el resto de pruebas.
+    ctx.clienteA = (await login(ctx.emails.clienteA, "nueva123")).data.token;
+    const vuelta = await http("PUT", "/account/password", {
+      token: ctx.clienteA,
+      body: { currentPassword: "nueva123", newPassword: CLAVE },
+    });
+    assert.equal(vuelta.status, 200, errores(vuelta));
+  });
+});
+
+describe("Cuenta: mi cuenta", () => {
+  test("edita el nombre", async () => {
+    const r = await http("PUT", "/account", { token: ctx.clienteB, body: { name: "Cliente B Renombrado" } });
+    assert.equal(r.status, 200, errores(r));
+    assert.equal(r.data.user.name, "Cliente B Renombrado");
+    assert.equal((await http("PUT", "/account", { token: ctx.clienteB, body: { name: " " } })).status, 400);
+  });
+
+  test("cambiar la contrasena exige la actual y una nueva valida", async () => {
+    const mal = await http("PUT", "/account/password", {
+      token: ctx.clienteB,
+      body: { currentPassword: "incorrecta9", newPassword: "nueva123" },
+    });
+    assert.equal(mal.status, 400);
+    const igual = await http("PUT", "/account/password", {
+      token: ctx.clienteB,
+      body: { currentPassword: CLAVE, newPassword: CLAVE },
+    });
+    assert.equal(igual.status, 400);
+  });
+
+  test("eliminar la cuenta exige la contrasena, anonimiza y cancela citas futuras", async () => {
+    const reg = await http("POST", "/auth/register", {
+      body: { name: "Cliente Efimero", email: `${PREFIJO}.efimero@test.com`, password: CLAVE, acceptPrivacy: true },
+    });
+    assert.equal(reg.status, 201, errores(reg));
+    ctx.creados = [...(ctx.creados || []), reg.data.user.id];
+    const token = await tokenDe(`${PREFIJO}.efimero@test.com`);
+    const cita = await http("POST", "/appointments", {
+      token,
+      body: { vetProfileId: ctx.vetProfileId, mode: "CLINIC", date: VIERNES, time: "11:30" },
+    });
+    assert.equal(cita.status, 201, errores(cita));
+
+    assert.equal((await http("DELETE", "/account", { token, body: { password: "mala123" } })).status, 400);
+    const r = await http("DELETE", "/account", { token, body: { password: CLAVE } });
+    assert.equal(r.status, 200, errores(r));
+
+    assert.equal((await http("GET", "/appointments", { token })).status, 403, "el token deja de servir");
+    assert.equal((await login(`${PREFIJO}.efimero@test.com`)).status, 401, "el correo ya no existe");
+    const usuario = await prisma.user.findUnique({ where: { id: reg.data.user.id } });
+    assert.equal(usuario.status, "DELETED");
+    assert.equal(usuario.name, "Usuario eliminado");
+    assert.ok(!usuario.email.includes("efimero"));
+    const citaDb = await prisma.appointment.findUnique({ where: { id: cita.data.appointment.id } });
+    assert.equal(citaDb.status, "CANCELLED");
+
+    const admin = await http("GET", "/admin/users?status=DELETED", { token: ctx.admin });
+    assert.ok(admin.data.users.some((u) => u.id === reg.data.user.id));
+    assert.equal((await http("PATCH", `/admin/users/${reg.data.user.id}/suspend`, { token: ctx.admin })).status, 409);
+  });
+});
+
+describe("Seguridad: limite de intentos de inicio de sesion", () => {
+  test("tras 5 intentos fallidos el sexto responde 429 aunque la clave sea correcta", async () => {
+    const email = `${PREFIJO}.bloqueo@test.com`;
+    const reg = await http("POST", "/auth/register", {
+      body: { name: "Cliente Bloqueo", email, password: CLAVE, acceptPrivacy: true },
+    });
+    assert.equal(reg.status, 201, errores(reg));
+    for (let i = 0; i < 5; i += 1) {
+      assert.equal((await login(email, "incorrecta1")).status, 401);
+    }
+    const bloqueado = await login(email, CLAVE);
+    assert.equal(bloqueado.status, 429);
+    assert.match(bloqueado.data.message, /Demasiados intentos/);
+    // Otro usuario no se ve afectado.
+    assert.equal((await login(ctx.emails.clienteB)).status, 200);
+  });
+
+  test("las respuestas llevan cabeceras de seguridad", async () => {
+    const r = await fetch(`${API}/health`);
+    assert.equal(r.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(r.headers.get("x-frame-options"), "DENY");
+  });
+});
+
+describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
+  const SINTOMAS = "Mi gato vomita sin parar y no quiere moverse";
+  // La mascota es obligatoria; por defecto se usa la del cliente que pide.
+  const pedir = (token, extra = {}) =>
+    http("POST", "/emergencies", {
+      token,
+      body: {
+        symptoms: SINTOMAS,
+        mode: "CLINIC",
+        phone: "3001234567",
+        petId: token === ctx.clienteB ? ctx.mascotaB : ctx.mascota,
+        ...extra,
+      },
+    });
+  const accion = (token, id, nombre, body) => http("PATCH", `/emergencies/${id}/${nombre}`, { token, body });
+  const mia = (token) => http("GET", "/emergencies/mine", { token });
+  const abiertas = (token) => http("GET", "/emergencies/open", { token });
+  const citaDe = (emergenciaId) =>
+    prisma.emergencyRequest
+      .findUnique({ where: { id: emergenciaId }, include: { appointment: true } })
+      .then((e) => e?.appointment ?? null);
+  const perfilDe = (email) => prisma.vetProfile.findFirst({ where: { user: { email } } });
+
+  test("sin veterinarios en su horario se avisa y no se crea la urgencia", async (t) => {
+    const disp = await http("GET", "/emergencies/availability", { token: ctx.clienteA });
+    assert.equal(disp.status, 200);
+    if (disp.data.available !== 0) {
+      t.skip("hay veterinarios reales atendiendo ahora en esta base");
+      return;
+    }
+    const r = await pedir(ctx.clienteA, { petId: ctx.mascota });
+    assert.equal(r.status, 409);
+    assert.equal(r.data.code, "NO_VETS_AVAILABLE");
+    assert.match(r.data.message, /clínica veterinaria más cercana/);
+  });
+
+  test("la mascota es obligatoria al pedir una urgencia", async () => {
+    // El cliente B necesita su propia mascota para las pruebas siguientes.
+    const rexB = await http("POST", "/pets", {
+      token: ctx.clienteB,
+      body: { name: "Toby", species: "Perro", sex: "Macho", birthDate: "2020-05-05" },
+    });
+    assert.equal(rexB.status, 201, errores(rexB));
+    ctx.mascotaB = rexB.data.pet.id;
+
+    const sin = await pedir(ctx.clienteA, { petId: undefined });
+    assert.equal(sin.status, 400);
+    assert.match(sin.data.errors.join(" "), /Elige la mascota/);
+    assert.equal((await pedir(ctx.clienteA, { petId: "" })).status, 400);
+  });
+
+  test("valida descripcion, modalidad, direccion, telefono y la mascota", async () => {
+    for (const extra of [{ symptoms: "corto" }, { mode: "VOLANDO" }, { mode: "HOME" }, { phone: "abc" }]) {
+      assert.equal((await pedir(ctx.clienteA, extra)).status, 400, JSON.stringify(extra));
+    }
+    // La mascota de otro cliente no se puede usar.
+    assert.equal((await pedir(ctx.clienteB, { petId: ctx.mascota })).status, 404);
+  });
+
+  test("ya no existe el turno aparte; un veterinario sin aprobar no atiende urgencias", async () => {
+    assert.equal((await http("PUT", "/emergencies/duty", { token: ctx.vet, body: { hours: 4 } })).status, 404);
+
+    const reg = await registroVeterinario(`${PREFIJO}.vet3@test.com`, `QC${RUN}`, `Vet Pendiente ${RUN}`);
+    assert.equal(reg.status, 201, errores(reg));
+    const pendiente = await tokenDe(`${PREFIJO}.vet3@test.com`);
+    const lista = await abiertas(pendiente);
+    assert.deepEqual({ canAttend: lista.data.canAttend, total: lista.data.requests.length }, { canAttend: false, total: 0 });
+    assert.equal((await accion(pendiente, 1, "accept")).status, 409);
+  });
+
+  test("los veterinarios reciben urgencias segun su horario de atencion (Mi horario)", async (t) => {
+    const ahora = new Date();
+    const minutos = parseTime(toTimeOfDay(ahora));
+    if (minutos > 23 * 60 + 25) {
+      t.skip("muy cerca de la medianoche: la urgencia ocupa 30 minutos dentro del dia");
+      return;
+    }
+    // Horario de hoy para los dos veterinarios (se retira al terminar el grupo).
+    ctx.perfiles = { vet: await perfilDe(ctx.emails.vet), vet2: await perfilDe(ctx.emails.vet2) };
+    ctx.horarios = [];
+    for (const perfil of Object.values(ctx.perfiles)) {
+      const a = await prisma.availability.create({
+        data: { vetProfileId: perfil.id, weekday: localWeekday(ahora), startTime: "00:00", endTime: "23:59" },
+      });
+      ctx.horarios.push(a.id);
+    }
+    ctx.enHorario = true;
+
+    const disp = await http("GET", "/emergencies/availability", { token: ctx.clienteA });
+    assert.ok(disp.data.available >= 2);
+
+    const r = await pedir(ctx.clienteA, { petId: ctx.mascota });
+    assert.equal(r.status, 201, errores(r));
+    assert.equal(r.data.emergency.status, "OPEN");
+    assert.equal(r.data.emergency.pet.name, "Michi");
+    assert.ok(r.data.emergency.expiresAt);
+    assert.equal(r.data.emergency.vet, null);
+    ctx.urgencia = r.data.emergency.id;
+
+    const avisos = await http("GET", "/notifications", { token: ctx.vet });
+    assert.match(avisos.data.notifications[0].message, /^URGENCIA en la veterinaria: Cliente clienteA QA \(Michi, Gato\)/);
+
+    const otra = await pedir(ctx.clienteA);
+    assert.equal(otra.status, 409);
+    assert.equal(otra.data.code, "EMERGENCY_IN_PROGRESS");
+  });
+
+  test("otro cliente no puede cancelar la urgencia ajena", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    assert.equal((await accion(ctx.clienteB, ctx.urgencia, "cancel")).status, 404);
+  });
+
+  test("un veterinario con un bloqueo de agenda no recibe urgencias; los demas ven los datos de contacto", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const vet2 = await tokenDe(ctx.emails.vet2);
+    const bloqueo = await prisma.scheduleBlock.create({
+      data: {
+        vetProfileId: ctx.perfiles.vet2.id,
+        startsAt: new Date(Date.now() - 60 * 60000),
+        endsAt: new Date(Date.now() + 60 * 60000),
+        reason: "QA",
+      },
+    });
+    try {
+      const sin = await abiertas(vet2);
+      assert.deepEqual({ available: sin.data.available, total: sin.data.requests.length }, { available: false, total: 0 });
+      const r = await accion(vet2, ctx.urgencia, "accept");
+      assert.equal(r.status, 409);
+      assert.equal(r.data.code, "NOT_AVAILABLE");
+    } finally {
+      await prisma.scheduleBlock.delete({ where: { id: bloqueo.id } });
+    }
+
+    const ve = await abiertas(ctx.vet);
+    assert.equal(ve.data.available, true);
+    const u = ve.data.requests.find((x) => x.id === ctx.urgencia);
+    assert.deepEqual(
+      { cliente: u.client.name, telefono: u.phone, mascota: u.pet.name, sintomas: u.symptoms },
+      { cliente: "Cliente clienteA QA", telefono: "3001234567", mascota: "Michi", sintomas: SINTOMAS }
+    );
+
+    assert.equal((await abiertas(ctx.clienteA)).status, 403);
+    assert.equal((await abiertas(ctx.admin)).status, 403);
+    assert.equal((await pedir(ctx.vet)).status, 403, "un veterinario no pide urgencias");
+  });
+
+  test("una urgencia a domicilio solo llega a veterinarios que atienden a domicilio", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    assert.equal((await accion(ctx.clienteA, ctx.urgencia, "cancel")).status, 200);
+    const vet2 = await tokenDe(ctx.emails.vet2); // vet2 solo atiende en veterinaria
+
+    const r = await pedir(ctx.clienteA, { mode: "HOME", address: "Calle 1 # 2-3", petId: ctx.mascota });
+    assert.equal(r.status, 201, errores(r));
+    const id = r.data.emergency.id;
+    assert.equal(r.data.emergency.address, "Calle 1 # 2-3");
+
+    assert.ok((await abiertas(ctx.vet)).data.requests.some((x) => x.id === id), "el que atiende a domicilio la ve");
+    assert.ok(!(await abiertas(vet2)).data.requests.some((x) => x.id === id), "el de solo veterinaria no");
+    const intento = await accion(vet2, id, "accept");
+    assert.equal(intento.status, 409);
+    assert.match(intento.data.message, /modalidad que no atiendes/);
+
+    assert.equal((await accion(ctx.clienteA, id, "cancel")).status, 200);
+  });
+
+  test("si dos veterinarios la aceptan a la vez, solo uno se queda con ella", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const vet2 = await tokenDe(ctx.emails.vet2);
+    const r = await pedir(ctx.clienteA, { petId: ctx.mascota });
+    assert.equal(r.status, 201, errores(r));
+    ctx.urgencia = r.data.emergency.id;
+
+    const [a, b] = await Promise.all([accion(ctx.vet, ctx.urgencia, "accept"), accion(vet2, ctx.urgencia, "accept")]);
+    assert.deepEqual([a.status, b.status].sort(), [200, 409]);
+    ctx.ganador = a.status === 200 ? ctx.vet : vet2;
+    ctx.libre = a.status === 200 ? vet2 : ctx.vet;
+    ctx.libreEmail = a.status === 200 ? ctx.emails.vet2 : ctx.emails.vet;
+    ctx.ganadorEmail = a.status === 200 ? ctx.emails.vet : ctx.emails.vet2;
+  });
+
+  test("al aceptar, la urgencia ocupa la agenda del veterinario con una cita confirmada", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const cita = await citaDe(ctx.urgencia);
+    assert.ok(cita, "se creo la cita");
+    assert.equal(cita.status, "CONFIRMED");
+    assert.equal(cita.durationMinutes, 30);
+    assert.match(cita.notes, /^URGENCIA: /);
+    assert.equal((await perfilDe(ctx.ganadorEmail)).id, cita.vetProfileId);
+
+    const agenda = await http("GET", "/appointments", { token: ctx.ganador });
+    assert.ok(agenda.data.appointments.some((c) => c.id === cita.id), "aparece en Mi agenda");
+    const mias = await http("GET", "/appointments", { token: ctx.clienteA });
+    assert.ok(mias.data.appointments.some((c) => c.id === cita.id), "y en las citas del dueño");
+
+    // Se gestiona desde Urgencias, no desde la agenda.
+    const r = await http("PATCH", `/appointments/${cita.id}/cancel`, { token: ctx.ganador });
+    assert.equal(r.status, 409);
+    assert.equal(r.data.code, "EMERGENCY_APPOINTMENT");
+  });
+
+  test("el dueño ve quien la atiende y como contactarlo, y recibe un aviso", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const m = await mia(ctx.clienteA);
+    assert.equal(m.data.active.status, "ACCEPTED");
+    assert.match(m.data.active.vet.name, new RegExp(`${NOMBRE_VET}|Vet Rechazado ${RUN}`));
+    assert.equal(m.data.active.vet.phone, "3001234567");
+    assert.match(m.data.active.vet.address, /Barrio QA/);
+    assert.equal(m.data.active.expiresAt, null);
+
+    const avisos = await http("GET", "/notifications", { token: ctx.clienteA });
+    assert.match(avisos.data.notifications[0].message, /aceptó tu urgencia/);
+  });
+
+  test("un veterinario con una urgencia en curso no recibe ni acepta otra", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const b = await pedir(ctx.clienteB);
+    assert.equal(b.status, 201, errores(b));
+    assert.equal((await abiertas(ctx.ganador)).data.available, false);
+    const r = await accion(ctx.ganador, b.data.emergency.id, "accept");
+    assert.equal(r.status, 409);
+    assert.equal(r.data.code, "NOT_AVAILABLE");
+    assert.equal((await accion(ctx.clienteB, b.data.emergency.id, "cancel")).status, 200);
+  });
+
+  test("al aceptar una urgencia, el veterinario accede a la historia de esa mascota hasta que la libera", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const rex = await http("POST", "/pets", {
+      token: ctx.clienteB,
+      body: { name: "Rex", species: "Perro", sex: "Macho", birthDate: "2021-02-02" },
+    });
+    assert.equal(rex.status, 201, errores(rex));
+    const historia = () => http("GET", `/medical-records/pets/${rex.data.pet.id}`, { token: ctx.libre });
+
+    const u = await pedir(ctx.clienteB, { petId: rex.data.pet.id });
+    assert.equal(u.status, 201, errores(u));
+    assert.equal((await historia()).status, 404, "sin relacion con la mascota");
+
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "accept")).status, 200);
+    assert.equal((await historia()).status, 200, "con la urgencia aceptada");
+    const citaUno = await citaDe(u.data.emergency.id);
+    assert.equal(citaUno.status, "CONFIRMED");
+
+    const liberada = await accion(ctx.libre, u.data.emergency.id, "release");
+    assert.equal(liberada.status, 200, errores(liberada));
+    assert.equal((await historia()).status, 404, "al liberarla pierde el acceso");
+    assert.equal((await mia(ctx.clienteB)).data.active.status, "OPEN");
+    assert.equal((await prisma.appointment.findUnique({ where: { id: citaUno.id } })).status, "CANCELLED", "la agenda queda libre");
+    const aviso = await http("GET", "/notifications", { token: ctx.clienteB });
+    assert.match(aviso.data.notifications[0].message, /no puede atender tu urgencia/);
+
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "accept")).status, 200);
+    const citaDos = await citaDe(u.data.emergency.id);
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "complete")).status, 200);
+    assert.equal((await prisma.appointment.findUnique({ where: { id: citaDos.id } })).status, "COMPLETED");
+    assert.equal((await historia()).status, 200, "atendida: conserva el acceso a la historia");
+
+    const m = await mia(ctx.clienteB);
+    assert.equal(m.data.active, null);
+    assert.equal(m.data.emergencies[0].status, "COMPLETED");
+    const fin = await http("GET", "/notifications", { token: ctx.clienteB });
+    assert.match(fin.data.notifications[0].message, /marcó tu urgencia como atendida/);
+
+    // Ya cerrada: no se puede completar ni liberar de nuevo.
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "complete")).status, 409);
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "release")).status, 409);
+  });
+
+  test("si el veterinario tiene una cita en ese rato, la urgencia tiene prioridad y se pide reagendar", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const perfil = await perfilDe(ctx.libreEmail);
+    const cita = await prisma.appointment.create({
+      data: {
+        mode: "CLINIC",
+        scheduledAt: new Date(Date.now() - 5 * 60000),
+        durationMinutes: 60,
+        status: "CONFIRMED",
+        clientId: (await prisma.user.findUnique({ where: { email: ctx.emails.clienteA } })).id,
+        vetProfileId: perfil.id,
+      },
+    });
+    const u = await pedir(ctx.clienteB);
+    assert.equal(u.status, 201, errores(u));
+
+    // Aun con la cita, sigue recibiendo la urgencia.
+    assert.ok((await abiertas(ctx.libre)).data.requests.some((x) => x.id === u.data.emergency.id));
+
+    const aviso = await accion(ctx.libre, u.data.emergency.id, "accept");
+    assert.equal(aviso.status, 409);
+    assert.equal(aviso.data.code, "APPOINTMENT_CONFLICT");
+    assert.equal(aviso.data.conflicts.length, 1);
+    assert.equal(aviso.data.conflicts[0].id, cita.id);
+    assert.equal((await prisma.appointment.findUnique({ where: { id: cita.id } })).status, "CONFIRMED", "nada cambia sin confirmar");
+
+    const ok = await accion(ctx.libre, u.data.emergency.id, "accept", { rescheduleConflicts: true });
+    assert.equal(ok.status, 200, errores(ok));
+    assert.match(ok.data.message, /reagendar a 1 cliente/);
+    assert.equal((await prisma.appointment.findUnique({ where: { id: cita.id } })).status, "CANCELLED");
+    const nuevo = await http("GET", "/notifications", { token: ctx.clienteA });
+    assert.match(nuevo.data.notifications[0].message, /urgencia, que tiene prioridad.*reagendes/);
+
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "complete")).status, 200);
+  });
+
+  test("si el dueño cancela una urgencia aceptada, se avisa al veterinario y se libera la agenda", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const m = await mia(ctx.clienteA);
+    const cita = await citaDe(m.data.active.id);
+    assert.equal((await accion(ctx.clienteA, m.data.active.id, "cancel")).status, 200);
+    const aviso = await http("GET", "/notifications", { token: ctx.ganador });
+    assert.match(aviso.data.notifications[0].message, /canceló su urgencia/);
+    assert.equal((await prisma.appointment.findUnique({ where: { id: cita.id } })).status, "CANCELLED");
+    assert.equal((await accion(ctx.ganador, m.data.active.id, "complete")).status, 409);
+  });
+
+  test("la urgencia se atiende como una cita: iniciar, historia clinica y terminar", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const u = await pedir(ctx.clienteA, { petId: ctx.mascota });
+    assert.equal(u.status, 201, errores(u));
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "accept")).status, 200);
+    const cita = await citaDe(u.data.emergency.id);
+
+    const vista = await mia(ctx.libre);
+    assert.equal(vista.data.active.appointment.id, cita.id, "el veterinario ve la cita de la urgencia");
+    assert.equal(vista.data.active.appointment.status, "CONFIRMED");
+
+    const inicio = await http("PATCH", `/appointments/${cita.id}/start`, { token: ctx.libre });
+    assert.equal(inicio.status, 200, errores(inicio));
+    assert.equal((await mia(ctx.clienteA)).data.active.inProgress, true, "el dueño ve que la atienden");
+
+    const liberar = await accion(ctx.libre, u.data.emergency.id, "release");
+    assert.equal(liberar.status, 409, "iniciada, ya no se libera");
+    assert.match(liberar.data.message, /Ya iniciaste la atención/);
+
+    const sinHistoria = await http("PATCH", `/appointments/${cita.id}/complete`, { token: ctx.libre });
+    assert.equal(sinHistoria.data.code, "RECORD_REQUIRED");
+    const entrada = await http("POST", "/medical-records", {
+      token: ctx.libre,
+      body: { petId: ctx.mascota, appointmentId: cita.id, reason: "Vomito persistente", diagnosis: "Gastroenteritis" },
+    });
+    assert.equal(entrada.status, 201, errores(entrada));
+
+    const fin = await http("PATCH", `/appointments/${cita.id}/complete`, { token: ctx.libre });
+    assert.equal(fin.status, 200, errores(fin));
+    const m = await mia(ctx.clienteA);
+    assert.equal(m.data.active, null);
+    assert.equal(m.data.emergencies.find((e) => e.id === u.data.emergency.id).status, "COMPLETED");
+    const avisos = await http("GET", "/notifications", { token: ctx.clienteA });
+    assert.match(avisos.data.notifications[0].message, /marcó tu urgencia como atendida/);
+  });
+
+  test("terminar sin registrar una urgencia la devuelve a las urgencias abiertas", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const u = await pedir(ctx.clienteA, { petId: ctx.mascota });
+    assert.equal(u.status, 201, errores(u));
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "accept")).status, 200);
+    const cita = await citaDe(u.data.emergency.id);
+    assert.equal((await http("PATCH", `/appointments/${cita.id}/start`, { token: ctx.libre })).status, 200);
+
+    const historia = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.libre });
+    assert.equal(historia.data.inProgressAppointments.find((c) => c.id === cita.id).emergency, true);
+
+    const r = await http("PATCH", `/appointments/${cita.id}/complete`, { token: ctx.libre, body: { skipRecord: true } });
+    assert.equal(r.status, 200, errores(r));
+    assert.equal(r.data.reopened, true);
+
+    // La urgencia vuelve a estar abierta, sin veterinario, con la agenda libre y plazo nuevo.
+    const m = await mia(ctx.clienteA);
+    assert.equal(m.data.active.status, "OPEN");
+    assert.equal(m.data.active.vet, null);
+    assert.equal(m.data.active.inProgress, false);
+    assert.equal((await prisma.appointment.findUnique({ where: { id: cita.id } })).status, "CANCELLED");
+    assert.ok((await abiertas(ctx.libre)).data.requests.some((x) => x.id === u.data.emergency.id), "otro puede aceptarla");
+    const aviso = await http("GET", "/notifications", { token: ctx.clienteA });
+    assert.match(aviso.data.notifications[0].message, /no puede atender tu urgencia/);
+
+    // Se limpia para las pruebas siguientes.
+    assert.equal((await accion(ctx.clienteA, u.data.emergency.id, "cancel")).status, 200);
+  });
+
+  test("una urgencia que nadie acepta a tiempo vence", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const x = await pedir(ctx.clienteA);
+    assert.equal(x.status, 201, errores(x));
+    await prisma.emergencyRequest.update({
+      where: { id: x.data.emergency.id },
+      data: { createdAt: new Date(Date.now() - 31 * 60 * 1000) },
+    });
+    const m = await mia(ctx.clienteA);
+    assert.equal(m.data.active, null);
+    // La fecha se retraso a proposito: se busca por id, no por posicion en la lista.
+    assert.equal(m.data.emergencies.find((e) => e.id === x.data.emergency.id).status, "EXPIRED");
+    assert.equal((await accion(ctx.ganador, x.data.emergency.id, "accept")).status, 409);
+  });
+
+  test("fuera de su horario el veterinario deja de recibir urgencias", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    await prisma.availability.deleteMany({ where: { id: { in: ctx.horarios } } });
+    assert.equal((await abiertas(ctx.vet)).data.available, false);
   });
 });
 

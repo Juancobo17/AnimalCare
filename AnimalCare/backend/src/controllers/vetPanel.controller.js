@@ -10,7 +10,7 @@ const { toPublicService } = require("../services/vet.service");
 const { toPublicAppointment } = require("../services/appointment.service");
 const { validateServiceInput } = require("../utils/serviceValidation");
 const { parseId } = require("../utils/params");
-const { parseDate, parseTime, toTimeString } = require("../utils/schedule");
+const { parseDate, parseTime, toTimeString, atMinutes, addDays } = require("../utils/schedule");
 const uploads = require("../utils/uploads");
 const prisma = require("../prisma");
 
@@ -258,8 +258,9 @@ async function addBlock(req, res) {
       return badRequest(res, errors);
     }
 
-    const startsAt = new Date(fecha.getTime() + inicio * 60 * 1000);
-    const endsAt = new Date(fecha.getTime() + fin * 60 * 1000);
+    const startsAt = atMinutes(fecha, inicio);
+    // Un bloqueo de dia completo termina al inicio del dia siguiente.
+    const endsAt = fin === 24 * 60 ? addDays(fecha, 1) : atMinutes(fecha, fin);
 
     if (endsAt.getTime() <= Date.now()) {
       return badRequest(res, ["No puedes bloquear un horario que ya pasó."]);

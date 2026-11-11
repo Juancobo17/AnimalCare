@@ -43,6 +43,7 @@ export const ESTADOS_CUENTA = {
   ACTIVE: "Activo",
   SUSPENDED: "Suspendido",
   REJECTED: "Rechazado",
+  DELETED: "Eliminado",
 };
 
 export const ROLES = {
@@ -77,7 +78,7 @@ export const ACCIONES = {
 
 // Acciones que se pueden aplicar segun el rol y el estado del usuario.
 export function accionesDisponibles(usuario) {
-  if (usuario.role === "ADMIN") return [];
+  if (usuario.role === "ADMIN" || usuario.status === "DELETED") return [];
   const acciones = [];
   if (usuario.role === "VETERINARIAN" && usuario.status === "PENDING") acciones.push("approve", "reject");
   if (usuario.role === "VETERINARIAN" && usuario.status === "REJECTED") acciones.push("approve");

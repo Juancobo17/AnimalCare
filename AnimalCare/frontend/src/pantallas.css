@@ -1,0 +1,1017 @@
+/* ==========================================================
+   AnimalCare - Pantallas internas (mismo estilo del panel de inicio)
+   Anchos unificados y tarjetas de veterinario renovadas.
+   ========================================================== */
+
+/* Paginas con formularios o detalle: columna mas angosta para que los
+   campos no queden estirados. El resto de paginas usa todo el ancho. */
+.contenedor-medio {
+  max-width: 72rem;
+}
+
+/* ---------- Listado de veterinarios ---------- */
+
+.vet-cabeza {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.vet-cabeza .foto-vet {
+  border-width: 3px;
+  border-color: var(--verde-100);
+}
+
+.vet-titulo {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vet-titulo h3 {
+  margin: 0 0 2px;
+  font-size: 1.2rem;
+}
+
+.vet-especialidad {
+  font-size: 0.92rem;
+  color: var(--texto-suave);
+}
+
+.vet-titulo .calificacion {
+  display: block;
+  margin: 6px 0 0;
+}
+
+.vet-titulo .calificacion-estrellas {
+  font-size: 1.05rem;
+}
+
+.insignia-verificado {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--verde-700);
+  background-color: var(--verde-tinte-2);
+  border-radius: 999px;
+}
+
+.tarjeta-veterinario .vet-info {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tarjeta-veterinario .etiquetas {
+  margin: 0 0 2px;
+}
+
+.vet-dato {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.92rem;
+  color: var(--texto-medio);
+}
+
+.vet-dato svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--texto-suave);
+}
+
+/* Pie de la tarjeta: precio, proximo turno y botones. */
+.vet-pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--borde);
+}
+
+.vet-precio {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  font-size: 0.82rem;
+  color: var(--texto-suave);
+}
+
+.vet-precio strong {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--verde-700);
+}
+
+.vet-turno {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1 1 10rem;
+  min-width: 0;
+  font-size: 0.88rem;
+}
+
+.vet-turno > svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--verde-600);
+}
+
+.vet-turno > span {
+  display: flex;
+  flex-direction: column;
+}
+
+.vet-turno strong {
+  color: var(--tinta);
+}
+
+.vet-botones {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+@media (max-width: 480px) {
+  .vet-cabeza {
+    flex-wrap: wrap;
+  }
+
+  .insignia-verificado {
+    order: -1;
+  }
+
+  .vet-botones {
+    width: 100%;
+  }
+
+  .vet-botones .boton {
+    flex: 1 1 0;
+  }
+}
+
+/* ---------- Listas en varias columnas cuando hay espacio ---------- */
+
+.lista-mascotas,
+.lista-citas {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+/* Mascotas: columnas de tamano fijo, una sola no se estira a todo el ancho. */
+.lista-mascotas {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 34rem), 1fr));
+}
+
+/* Citas: si hay una sola ocupa todo el ancho; si hay mas, se reparten en columnas. */
+.lista-citas {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 34rem), 1fr));
+}
+
+/* Dato con icono (direccion, correo) dentro de tarjetas. */
+.dato-icono {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dato-icono svg {
+  flex-shrink: 0;
+}
+
+/* ---------- Iconos SVG: especie y estrellas ---------- */
+
+/* Icono de especie dentro de una linea de texto. */
+.icono-especie {
+  display: inline-block;
+  vertical-align: -3px;
+  flex-shrink: 0;
+}
+
+.estrellas-fila {
+  display: inline-flex;
+  gap: 2px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.estrella-svg {
+  color: #c4cbc6;
+}
+
+.estrella-svg-llena {
+  color: var(--estrella);
+  fill: var(--estrella);
+}
+
+/* Selector de calificacion (estrellas que se pulsan). */
+.estrellas-selector .estrella {
+  display: inline-flex;
+  padding: 2px;
+  line-height: 1;
+  color: #c4cbc6;
+  transition: color var(--transicion), transform var(--transicion);
+}
+
+.estrellas-selector .estrella:hover {
+  color: var(--estrella);
+  transform: scale(1.1);
+}
+
+.estrellas-selector .estrella.llena {
+  color: var(--estrella);
+}
+
+.estrellas-selector .estrella.llena svg {
+  fill: currentColor;
+}
+
+/* ==========================================================
+   Mis citas: grupos por dia y barra de dia de la agenda
+   ========================================================== */
+
+.grupo-citas {
+  margin-bottom: 26px;
+}
+
+.grupo-titulo {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 6px 16px;
+  font-size: 1.05rem;
+  /* Fondo propio: el titulo va sobre el patron de huellas y asi se lee bien. */
+  background-color: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+}
+
+.grupo-total {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--texto-suave);
+}
+
+.boton-cuadrado {
+  width: 44px;
+  padding: 0;
+}
+
+/* ==========================================================
+   Mis mascotas: ficha de cada mascota
+   ========================================================== */
+
+.mascota-ficha {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.mascota-cabeza {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.mascota-cabeza .mascota-icono {
+  flex-shrink: 0;
+  width: 60px;
+  height: 60px;
+  background-color: var(--verde-tinte-2);
+}
+
+.mascota-cabeza h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.mascota-cabeza p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.mascota-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mascota-chips li {
+  padding: 4px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--verde-700);
+  background-color: var(--verde-tinte);
+  border-radius: 999px;
+}
+
+.mascota-acciones {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--borde);
+}
+
+.mascota-acciones > a {
+  margin-right: auto;
+}
+
+.mascota-confirmar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: auto;
+  padding: 12px 14px;
+  font-weight: 600;
+  background-color: var(--error-fondo);
+  border: 1px solid var(--error-borde);
+  border-radius: var(--radio);
+}
+
+@media (max-width: 480px) {
+  .mascota-acciones > a {
+    flex: 1 1 auto;
+  }
+}
+
+/* ==========================================================
+   Mi horario: filas de la semana
+   ========================================================== */
+
+.semana-dia:hover {
+  border-color: var(--verde-borde);
+}
+
+/* Dia que no se atiende: fila apagada, sin llamar la atencion. */
+.semana-dia-libre {
+  background-color: transparent;
+  border-style: dashed;
+}
+
+.semana-nombre input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--verde-600);
+}
+
+.franja input[type="time"] {
+  min-height: 40px;
+}
+
+/* Boton para quitar una franja horaria (el nombre lo comparte solo esta pantalla). */
+.semana .boton-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  color: var(--error-texto);
+  background-color: var(--superficie);
+  border: 1px solid var(--error-borde);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background-color var(--transicion);
+}
+
+.semana .boton-icono:hover {
+  background-color: var(--error-fondo);
+}
+
+@media (max-width: 720px) {
+  .semana-dia {
+    padding: 12px;
+  }
+}
+
+/* ==========================================================
+   Listas desplegables: flecha propia en vez de la del navegador
+   ========================================================== */
+
+.campo select,
+.franja select,
+.navegador-dia select {
+  padding-right: 42px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7770' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+  text-overflow: ellipsis;
+}
+
+.campo select:hover {
+  border-color: var(--verde-borde);
+}
+
+.campo select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ==========================================================
+   Veterinarios: panel de filtros
+   ========================================================== */
+
+.filtros-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.filtros-panel .campo {
+  margin-bottom: 0;
+}
+
+.filtros-panel label {
+  font-size: 0.85rem;
+  color: var(--texto-medio);
+}
+
+.filtros-fila {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+/* Campo de texto con un icono dentro, a la izquierda. */
+.entrada-icono {
+  position: relative;
+}
+
+.entrada-icono > svg {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  color: var(--texto-suave);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.campo .entrada-icono input {
+  padding-left: 42px;
+}
+
+.filtros-pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--borde);
+}
+
+/* Casilla presentada como boton de dos estados (seleccionado o no). */
+.chip-filtro {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--texto-medio);
+  background-color: var(--superficie);
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: border-color var(--transicion), background-color var(--transicion), color var(--transicion),
+    box-shadow var(--transicion);
+}
+
+.chip-filtro:hover {
+  border-color: var(--verde-500);
+}
+
+.chip-filtro:has(input:checked) {
+  color: var(--verde-700);
+  background-color: var(--verde-tinte-2);
+  border-color: var(--verde-500);
+  box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.18);
+}
+
+.chip-filtro:has(input:focus-visible) {
+  box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.45);
+}
+
+/* La casilla real sigue existiendo para teclado y lectores de pantalla. */
+.chip-filtro input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+@media (max-width: 960px) {
+  .filtros-fila {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .filtros-fila {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+}
+
+/* ==========================================================
+   Selector: lista desplegable propia (reemplaza al <select>)
+   ========================================================== */
+
+.selector {
+  position: relative;
+}
+
+.selector-boton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--texto);
+  text-align: left;
+  background-color: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  cursor: pointer;
+  transition: border-color var(--transicion), box-shadow var(--transicion);
+}
+
+.selector-boton:hover:not(:disabled) {
+  border-color: var(--verde-borde);
+}
+
+.selector-boton:focus-visible,
+.selector-abierto .selector-boton {
+  outline: none;
+  border-color: var(--verde-600);
+  box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.28);
+}
+
+.selector-boton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.selector-texto {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sin opcion elegida: se muestra como un marcador de posicion. */
+.selector-vacio .selector-texto {
+  color: var(--texto-suave);
+}
+
+.selector-boton > svg {
+  flex-shrink: 0;
+  color: var(--texto-suave);
+  transition: transform var(--transicion);
+}
+
+.selector-abierto .selector-boton > svg {
+  color: var(--verde-700);
+  transform: rotate(180deg);
+}
+
+/* ---------- Lista de opciones ---------- */
+
+.selector-lista {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  z-index: 40;
+  max-height: 16rem;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  list-style: none;
+  background-color: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  box-shadow: var(--sombra-elevada), 0 12px 32px rgba(23, 37, 29, 0.12);
+  animation: aparecer 0.14s ease-out;
+}
+
+.selector-lista-arriba {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.selector-opcion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
+  padding: 8px 12px;
+  font-size: 0.97rem;
+  color: var(--texto);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.selector-opcion-activa {
+  background-color: var(--verde-tinte);
+}
+
+.selector-opcion-elegida {
+  font-weight: 700;
+  color: var(--verde-700);
+}
+
+.selector-opcion-elegida > svg {
+  flex-shrink: 0;
+  color: var(--verde-600);
+}
+
+.selector-opcion-deshabilitada {
+  color: var(--texto-suave);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* La tarjeta que contiene una lista abierta pasa por encima de las demas,
+   para que la lista nunca quede tapada por la tarjeta de abajo. */
+.tarjeta:has(.selector-abierto),
+.cita:has(.selector-abierto) {
+  position: relative;
+  z-index: 30;
+}
+
+/* ==========================================================
+   Mis servicios: lista y formulario lado a lado
+   ========================================================== */
+
+.servicios-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24rem;
+  gap: 20px;
+  align-items: start;
+}
+
+.servicios-cols .tarjeta {
+  margin-bottom: 0;
+}
+
+.servicios-nuevo {
+  position: sticky;
+  top: 5.5rem;
+}
+
+.servicios-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.servicio-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  padding: 14px 16px;
+  background-color: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  transition: border-color var(--transicion), box-shadow var(--transicion);
+}
+
+.servicio-item:hover {
+  border-color: var(--verde-500);
+  box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.15);
+}
+
+/* Formulario de edicion dentro de la fila. */
+.servicio-item > form {
+  flex: 1 1 100%;
+}
+
+.servicio-info {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.servicio-info p {
+  margin: 2px 0 0;
+  font-size: 0.88rem;
+}
+
+.servicio-duracion {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.85rem;
+  color: var(--texto-suave);
+}
+
+.servicio-precio {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--verde-700);
+  white-space: nowrap;
+}
+
+.servicio-acciones {
+  display: flex;
+  gap: 8px;
+}
+
+.servicio-confirmar {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  font-weight: 600;
+  background-color: var(--error-fondo);
+  border: 1px solid var(--error-borde);
+  border-radius: var(--radio);
+}
+
+.estado-vacio-compacto p {
+  margin: 0;
+}
+
+@media (max-width: 960px) {
+  .servicios-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .servicios-nuevo {
+    position: static;
+  }
+}
+
+/* ==========================================================
+   Admin: filtros y tabla de usuarios
+   ========================================================== */
+
+.filtros-admin {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16rem;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.filtros-admin .campo {
+  margin-bottom: 0;
+}
+
+.filtros-admin label {
+  font-size: 0.85rem;
+  color: var(--texto-medio);
+}
+
+@media (max-width: 720px) {
+  .filtros-admin {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.tabla tbody tr {
+  transition: background-color var(--transicion);
+}
+
+.tabla tbody tr:hover:not(.tabla-detalle) {
+  background-color: #f1f7f3;
+}
+
+/* ==========================================================
+   Mi perfil: foto y tarjeta a un lado, datos publicos al otro
+   ========================================================== */
+
+.perfil-cols {
+  display: grid;
+  grid-template-columns: 24rem minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.perfil-cols .tarjeta {
+  margin-bottom: 0;
+}
+
+.perfil-lateral {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* En la columna angosta la foto va arriba y los botones debajo. */
+.perfil-lateral .foto-editor {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+@media (max-width: 960px) {
+  .perfil-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ==========================================================
+   Notificaciones
+   ========================================================== */
+
+.notificaciones .lista-notificaciones {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notificaciones .lista-notificaciones > li {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.notificaciones .lista-notificaciones > li > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.notificaciones .lista-notificaciones > li > .enlace-accion {
+  flex-shrink: 0;
+}
+
+.notificacion-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 38px;
+  height: 38px;
+  color: var(--texto-suave);
+  background-color: #eef1ee;
+  border-radius: 50%;
+}
+
+/* No leida: fondo verde suave y borde marcado para que se distinga. */
+.lista-notificaciones .notificacion-nueva {
+  background-color: #f1f8f3;
+  border-color: #cfe5d6;
+}
+
+.lista-notificaciones .notificacion-nueva .notificacion-icono {
+  color: var(--verde-700);
+  background-color: #dcefe3;
+}
+
+@media (max-width: 560px) {
+  .notificaciones .lista-notificaciones > li {
+    flex-wrap: wrap;
+  }
+}
+
+/* Mientras se descarga una pantalla: fondo vacio con el patron, sin parpadeos. */
+.pagina-cargando {
+  min-height: 100vh;
+}
+
+/* ==========================================================
+   Historia clinica: ficha de la mascota y detalle de cada entrada
+   ========================================================== */
+
+.historia-mascota {
+  align-items: center;
+}
+
+.historia-mascota .mascota-icono {
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  background-color: var(--verde-tinte-2);
+}
+
+.historia-mascota h1 {
+  margin: 0 0 6px;
+}
+
+.historia-mascota .mascota-chips {
+  margin-bottom: 4px;
+}
+
+.historia-dueno {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+}
+
+.entrada-fecha {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 0.85rem;
+  color: var(--verde-700);
+  background-color: var(--verde-tinte);
+  border-radius: 999px;
+}
+
+.entrada-anulada .entrada-fecha {
+  color: var(--texto-suave);
+  background-color: #eef1ee;
+}
+
+/* Diagnostico, tratamiento y observaciones ocupan todo el ancho. */
+.entrada-dato-ancho {
+  grid-column: 1 / -1;
+}
+
+@media print {
+  /* En papel no hay linea de tiempo ni fondos: solo el contenido. */
+  .historia {
+    padding-left: 0;
+  }
+
+  .historia::before,
+  .entrada::before {
+    display: none;
+  }
+
+  .entrada {
+    break-inside: avoid;
+    background: none;
+  }
+}
+
+/* ==========================================================
+   Ajustes de la revision con capturas
+   ========================================================== */
+
+/* Mis servicios: en la columna angosta el nombre va arriba y precio y duracion
+   debajo, lado a lado (antes se apretaban los tres en una fila). */
+.servicios-nuevo .formulario-servicio > .fila {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Mi perfil: los datos de solo lectura se separan de los campos que siguen. */
+.perfil-cols form .datos {
+  margin-bottom: 22px;
+}
+
+/* Mi perfil: en la columna lateral el bloque de la foto se ajusta a su contenido.
+   (La regla general le da 260px de base, que en columna se vuelve 260px de alto.) */
+.perfil-lateral .foto-editor > div {
+  flex: 0 0 auto;
+}
+
+/* ==========================================================
+   Perfil del veterinario: dos columnas en pantallas anchas
+   ========================================================== */
+
+.detalle-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.detalle-col {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.detalle-cols .tarjeta {
+  margin-bottom: 0;
+}
+
+@media (max-width: 960px) {
+  .detalle-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

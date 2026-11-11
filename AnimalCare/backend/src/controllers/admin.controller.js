@@ -9,7 +9,7 @@ const adminService = require("../services/admin.service");
 const { parseId } = require("../utils/params");
 const uploads = require("../utils/uploads");
 
-const ESTADOS = ["PENDING", "ACTIVE", "SUSPENDED", "REJECTED"];
+const ESTADOS = ["PENDING", "ACTIVE", "SUSPENDED", "REJECTED", "DELETED"];
 const ROLES = ["CLIENT", "VETERINARIAN", "ADMIN"];
 const MAX_QUERY_LENGTH = 60;
 const MAX_PAGE_SIZE = 100;
@@ -117,6 +117,9 @@ function crearAccion(nombre) {
         return res.status(404).json({ message: "El usuario no existe." });
       }
 
+      if (usuario.status === "DELETED") {
+        return res.status(409).json({ message: "La cuenta fue eliminada por su titular y no se puede modificar." });
+      }
       // Un administrador no se gestiona desde aqui (ni a si mismo ni a otro).
       if (usuario.role === "ADMIN") {
         return res.status(403).json({ message: "No se puede cambiar el estado de un administrador." });

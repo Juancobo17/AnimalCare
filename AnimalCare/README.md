@@ -56,7 +56,7 @@ Historias relacionadas que se adelantaron porque dependen de lo anterior:
 | AN-16    | Modificar citas por veterinario (reprogramar, confirmar, marcar atendida) | Implementada |
 | AN-17    | Visualizar citas pendientes de un dia por veterinario    | Implementada        |
 | AN-22    | Visualizar notificaciones por usuario                    | Implementada        |
-| AN-23    | Visualizar notificaciones por veterinario                | Implementada (sin "emergencias": no existe esa funcion) |
+| AN-23    | Visualizar notificaciones por veterinario                | Implementada (incluye las urgencias, ver abajo) |
 
 AN-15, AN-16, AN-17, AN-22 y AN-23 no tienen criterios de aceptacion en Jira. Los criterios
 implementados (y probados en `backend/tests/sprint2.test.js`) son:
@@ -81,6 +81,87 @@ Decisiones del Sprint 2:
   se cancelan y cada cliente recibe una notificacion.
 - **Notificaciones dentro de la plataforma**: aprobacion, rechazo, suspension y reactivacion de la
   cuenta, cancelaciones hechas por el cliente y por bloqueos de agenda. Son la base de AN-22 y AN-23.
+
+## Alcance del Sprint 3
+
+| Historia | Descripcion | Estado en el codigo |
+| -------- | ----------- | ------------------- |
+| AN-15, AN-16, AN-17 | Agenda del veterinario (cancelar, modificar, ver por dia) | Implementadas en el Sprint 2 |
+| AN-22, AN-23 | Notificaciones | Implementadas en el Sprint 2 |
+| AN-18 | Crear historia clinica | Implementada |
+| AN-19 | Eliminar historia clinica (anula la entrada con motivo) | Implementada |
+| AN-20 | Modificar historia clinica | Implementada |
+| AN-21 | El dueño accede a la historia clinica de su mascota | Implementada |
+
+Los criterios de aceptacion de estas historias, listos para copiar en Jira, estan en
+[docs/criterios-aceptacion-sprint3.md](docs/criterios-aceptacion-sprint3.md).
+
+Reglas de la historia clinica:
+
+- Es la lista de entradas de una mascota, una por consulta (motivo, diagnostico, tratamiento, peso,
+  temperatura, vacunas y observaciones).
+- Un veterinario ve y escribe en la historia solo de mascotas que tienen o tuvieron una cita con el
+  (no cancelada). Ve tambien las entradas de otros veterinarios, pero solo modifica o elimina las suyas.
+- Eliminar no borra: anula la entrada con un motivo. El dueño deja de verla y se conserva para auditoria.
+- El dueño consulta (solo lectura) la historia de sus mascotas y recibe un aviso con cada entrada nueva.
+- **Adjuntos:** el veterinario que escribio una entrada vigente le adjunta examenes, radiografias o
+  informes (PDF, JPG o PNG, hasta 5 MB y 10 por entrada) y puede quitarlos. Son privados: se guardan en
+  `backend/uploads/records` con nombre aleatorio y solo se descargan por la API
+  (`GET /api/medical-records/attachments/:id`) con sesion y permiso. Si la entrada se elimina, el dueño
+  deja de verlos; el veterinario si, para auditoria.
+
+## Urgencias (lo que AN-23 llamaba "emergencias")
+
+Un dueño con una mascota en apuros pide atencion urgente y los veterinarios que estan atendiendo en ese momento
+la reciben. No hay "turnos" aparte: la disponibilidad sale de **Mi horario**.
+
+1. **Quien recibe urgencias:** un veterinario con la cuenta aprobada, cuyo horario semanal cubre los proximos
+   30 minutos, sin un bloqueo de agenda y sin otra urgencia en curso. Las citas normales no lo impiden (ver 3).
+2. **El dueño describe la urgencia:** sintomas (10 a 500 caracteres), mascota (obligatoria: la urgencia se atiende como una cita y se registra en su historia), telefono y si la
+   atencion es en la veterinaria o a domicilio (con direccion). Solo puede tener **una urgencia en curso**.
+3. **Se avisa a los veterinarios disponibles compatibles** con la modalidad (una urgencia a domicilio solo llega
+   a quienes atienden a domicilio). El primero que la acepta se queda con ella: la toma es atomica, si dos la
+   aceptan a la vez solo uno la consigue. **Al aceptar se crea una cita confirmada de 30 minutos** que ocupa su
+   agenda (aparece en Mi agenda y en las citas del dueño, y nadie mas puede agendar ese rato). Si ya tenia citas
+   en ese rato, **la urgencia tiene prioridad**: el sistema se lo avisa y, si confirma, esas citas se cancelan y
+   se pide a cada cliente que reagende.
+4. **El dueño ve quien la atiende**, con su telefono y, si es en la veterinaria, la direccion. La pantalla se
+   actualiza sola cada 10 segundos.
+5. **Cierre:** el veterinario la marca como atendida (la cita queda atendida), o la libera si no puede (vuelve a
+   abrirse, se avisa a los demas y su agenda queda libre); el dueño puede cancelarla (la agenda tambien queda
+   libre); si nadie la acepta en `EMERGENCY_TTL_MIN` minutos (30) vence. La cita de una urgencia se gestiona desde
+   Urgencias, no se puede cancelar ni reagendar desde la agenda.
+6. **Historia clinica:** el veterinario que acepta una urgencia con una mascota accede a su historia clinica
+   mientras la atiende y despues de atenderla (no si la libera).
+
+AnimalCare conecta con veterinarios disponibles pero **no garantiza una respuesta**: la pantalla del dueño
+recuerda que, si la mascota esta grave, debe acudir de inmediato a la clinica veterinaria mas cercana.
+Cada paso genera una notificacion para la otra persona.
+
+## Zona horaria
+
+Todas las fechas y horas "de pared" (`AAAA-MM-DD`, `HH:MM`) se interpretan en la zona de la clinica,
+`CLINIC_TIMEZONE` (por defecto `America/Bogota`), sin importar donde corra el servidor ni la zona del
+navegador. En la base de datos se guardan instantes (UTC). Las utilidades estan en
+`backend/src/utils/schedule.js` y `frontend/src/services/zona.js`, con pruebas unitarias en
+`backend/tests/schedule.test.js` y `frontend/src/services/zona.test.js`.
+
+Las bases creadas antes de este cambio guardaban la hora de pared como si fuera UTC. Para corregirlas
+una sola vez: `node scripts/fix-timezone-data.js --aplicar` (sin `--aplicar` solo muestra que cambiaria).
+
+## Cuenta, privacidad y seguridad
+
+- **Consentimiento (Ley 1581):** el registro exige aceptar la politica de privacidad (`/privacidad`).
+- **Verificacion de correo:** al registrarse se envia un enlace; mientras no se confirme se muestra un
+  aviso con la opcion de reenviarlo. No bloquea el uso de la plataforma.
+- **Recuperar contrasena:** `/recuperar` envia un enlace de un solo uso que vence en 60 minutos.
+- **Mi cuenta (`/mi-cuenta`):** editar el nombre, cambiar la contrasena y eliminar la cuenta. Eliminar
+  anonimiza los datos personales, cancela las citas futuras y conserva citas pasadas, resenas e
+  historias clinicas sin identificar a la persona.
+- **Correo:** `MAIL_TRANSPORT=console` (por defecto) imprime los correos en la consola del servidor;
+  `MAIL_TRANSPORT=smtp` los envia con `SMTP_URL` y `MAIL_FROM`.
+- **Seguridad HTTP:** cabeceras de proteccion, CORS restringido a `CORS_ORIGIN`, y maximo 5 intentos
+  fallidos de inicio de sesion por IP y correo cada 15 minutos (`LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCK_MINUTES`).
 
 ### Mejoras de experiencia de usuario
 
@@ -246,6 +327,14 @@ JWT_EXPIRES_IN="2h"
 | `CLIENT_CANCEL_MIN_HOURS` | `2` | Horas antes de la cita hasta las que el cliente puede cancelar |
 | `REMINDERS_ENABLED` | `true` | `false` desactiva los recordatorios (por ejemplo en un servidor de pruebas) |
 | `REMINDER_INTERVAL_MS` | `600000` | Cada cuanto se revisan las citas para recordar |
+| `CLINIC_TIMEZONE` | `America/Bogota` | Zona horaria de la agenda |
+| `EMERGENCY_TTL_MIN` | `30` | Minutos que una urgencia espera a que la acepten antes de vencer |
+| `CORS_ORIGIN` | `http://localhost:5173,http://127.0.0.1:5173` | Origenes del frontend autorizados (separados por coma) |
+| `FRONTEND_URL` | `http://localhost:5173` | Base de los enlaces que van en los correos |
+| `TRUST_PROXY` | `false` | `true` detras de nginx o Docker, para leer la IP real |
+| `MAIL_TRANSPORT` | `console` | `console` o `smtp` |
+| `SMTP_URL`, `MAIL_FROM` | - | Solo con `MAIL_TRANSPORT=smtp` |
+| `LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCK_MINUTES` | `5`, `15` | Limite de intentos de inicio de sesion |
 
 ## Instalacion
 
@@ -279,13 +368,30 @@ cd frontend
 npm run dev
 ```
 
+Con Docker (base de datos, API y frontend con nginx en http://localhost:8080):
+
+```bash
+docker compose up --build
+```
+
+La API aplica las migraciones al arrancar; las fotos y tarjetas profesionales quedan en el volumen
+`uploads`. Cambia las contrasenas y `JWT_SECRET` de `docker-compose.yml` antes de usarlo fuera de tu
+maquina.
+
 ## Endpoints
 
 | Metodo | Ruta                     | Privada | Rol      | Descripcion                                      |
 | ------ | ------------------------ | ------- | -------- | ------------------------------------------------ |
 | GET    | /api/health              | No      | -        | Comprueba API y conexion con MySQL               |
 | POST   | /api/auth/register       | No      | -        | Registra un cliente (AN-6) o un veterinario (AN-7) |
-| POST   | /api/auth/login          | No      | -        | Valida credenciales y devuelve un JWT (AN-8)     |
+| POST   | /api/auth/login          | No      | -        | Valida credenciales y devuelve un JWT (AN-8). 429 tras 5 fallos |
+| POST   | /api/auth/forgot-password | No     | -        | Envia el enlace de recuperacion `{ email }`      |
+| POST   | /api/auth/reset-password | No      | -        | Cambia la contrasena con el enlace `{ token, password }` |
+| POST   | /api/auth/verify-email   | No      | -        | Confirma el correo `{ token }`                   |
+| PUT    | /api/account             | Si      | Cualquiera | Edita el nombre                                |
+| PUT    | /api/account/password    | Si      | Cualquiera | Cambia la contrasena `{ currentPassword, newPassword }` |
+| DELETE | /api/account             | Si      | CLIENT, VETERINARIAN | Elimina (anonimiza) la cuenta `{ password }` |
+| POST   | /api/account/resend-verification | Si | Cualquiera | Reenvia el enlace de confirmacion         |
 | GET    | /api/auth/me             | Si      | Cualquiera | Devuelve el usuario del token                  |
 | GET    | /api/vets                | Si      | Cualquiera | Lista veterinarios activos con `nextSlot`. Filtros: `q` (AN-27), `specialty`, `mode`, `zone`, `maxPrice`, `today=true`, `sort=next\|price\|rating` |
 | GET    | /api/vets/:id/days       | Si      | Cualquiera | Proximos 14 dias con la cantidad de turnos libres. Filtros `mode`, `serviceId` |
@@ -296,8 +402,16 @@ npm run dev
 | PATCH  | /api/appointments/:id/cancel | Si  | CLIENT, VETERINARIAN | Cancela una cita propia y libera el horario (AN-14, AN-15). Body opcional `{ reason }` |
 | PATCH  | /api/appointments/:id/reschedule | Si | VETERINARIAN | Mueve la cita a otro horario libre `{ date, time, reason? }` (AN-16) |
 | PATCH  | /api/appointments/:id/confirm | Si | VETERINARIAN | Confirma una cita pendiente (AN-16)         |
-| PATCH  | /api/appointments/:id/complete | Si | VETERINARIAN | Marca como atendida una cita cuya hora ya llego (AN-16) |
+| PATCH  | /api/appointments/:id/start | Si | VETERINARIAN | Inicia la atencion (desde la hora de la cita): pasa a `IN_PROGRESS` |
+| PATCH  | /api/appointments/:id/complete | Si | VETERINARIAN | Termina la atencion de una cita en atencion; con mascota exige la entrada de historia o `{ skipRecord: true }` (AN-16) |
 | POST   | /api/appointments/:id/review | Si  | CLIENT   | Califica una cita atendida `{ rating: 1-5, comment? }` |
+| GET    | /api/medical-records/pets/:petId | Si | CLIENT, VETERINARIAN | Historia clinica de una mascota (AN-21) |
+| POST   | /api/medical-records     | Si      | VETERINARIAN | Crea la entrada de una cita en curso o pasada, `appointmentId` obligatorio (AN-18) |
+| PUT    | /api/medical-records/:id | Si      | VETERINARIAN | Modifica una entrada propia (AN-20)          |
+| PATCH  | /api/medical-records/:id/annul | Si | VETERINARIAN | Elimina (anula) una entrada propia `{ reason }` (AN-19) |
+| POST   | /api/medical-records/:id/attachments | Si | VETERINARIAN | Adjunta un archivo a una entrada propia `{ file: dataURL, name? }` (PDF, JPG o PNG, max. 5 MB) |
+| GET    | /api/medical-records/attachments/:attachmentId | Si | CLIENT, VETERINARIAN | Descarga un adjunto (privado: solo con permiso sobre la mascota) |
+| DELETE | /api/medical-records/attachments/:attachmentId | Si | VETERINARIAN | Quita un adjunto de una entrada propia |
 | GET    | /api/pets                | Si      | CLIENT   | Mascotas activas del dueño                       |
 | POST   | /api/pets                | Si      | CLIENT   | Registra una mascota `{ name, species, sex, birthDate, weight? }` |
 | PUT    | /api/pets/:id            | Si      | CLIENT   | Actualiza una mascota propia                     |
@@ -319,6 +433,14 @@ npm run dev
 | GET    | /api/notifications       | Si      | Cualquiera | Ultimas notificaciones del usuario             |
 | PATCH  | /api/notifications/:id/read | Si   | Cualquiera | Marca una notificacion como leida              |
 | PATCH  | /api/notifications/read-all | Si   | Cualquiera | Marca todas como leidas (AN-22, AN-23)         |
+| GET    | /api/emergencies/availability | Si | CLIENT   | Cuantos veterinarios atienden ahora segun su horario (`available`, `home`, `clinic`) |
+| POST   | /api/emergencies         | Si      | CLIENT   | Pide una urgencia `{ petId, symptoms, mode, phone, address? }` (409 si ya tiene una en curso o no hay veterinarios atendiendo) |
+| PATCH  | /api/emergencies/:id/cancel | Si   | CLIENT   | Cancela su urgencia (abierta o aceptada)         |
+| GET    | /api/emergencies/mine    | Si      | CLIENT, VETERINARIAN | Sus urgencias; `active` es la que esta en curso |
+| GET    | /api/emergencies/open    | Si      | VETERINARIAN | Urgencias abiertas compatibles (solo si esta dentro de su horario) `{ available, canAttend, requests }` |
+| PATCH  | /api/emergencies/:id/accept | Si   | VETERINARIAN | Acepta una urgencia y ocupa su agenda 30 min (atomico; 409 si otro la tomo; 409 `APPOINTMENT_CONFLICT` si tiene citas en ese rato: reenviar con `{ rescheduleConflicts: true }` las cancela y pide reagendar) |
+| PATCH  | /api/emergencies/:id/complete | Si | VETERINARIAN | La marca como atendida                       |
+| PATCH  | /api/emergencies/:id/release | Si  | VETERINARIAN | La libera: vuelve a abrirse para los demas    |
 | GET    | /api/admin/users         | Si      | ADMIN    | Listado paginado (`page`, `pageSize`) con filtros `status`, `role`, `q` (AN-38) |
 | GET    | /api/admin/users/:id/license-doc | Si | ADMIN | Descarga la tarjeta profesional de un veterinario |
 | PATCH  | /api/admin/users/:id/approve | Si  | ADMIN    | Aprueba un veterinario (AN-35)                   |
@@ -405,13 +527,20 @@ Con `"mode": "HOME"` el campo `address` es obligatorio: es la direccion donde se
 | ----------------------------- | ------- | ----------------------------------------------- |
 | /login                        | No      | Inicio de sesion (AN-8)                         |
 | /register                     | No      | Registro de cliente o veterinario (AN-6, AN-7)  |
+| /recuperar, /restablecer      | No      | Recuperar contrasena                            |
+| /verificar-correo             | No      | Confirmacion del correo                         |
+| /privacidad                   | No      | Politica de privacidad y tratamiento de datos   |
+| /mi-cuenta                    | Si      | Datos, contrasena y eliminacion de la cuenta    |
 | /dashboard                    | Si      | Panel, distinto segun el rol                    |
 | /veterinarios                 | Si      | Listado con filtros por especialidad y modalidad |
 | /veterinarios/:id             | Si      | Perfil detallado y servicios (AN-26)            |
 | /veterinarios/:id/agendar     | Si      | Modalidad, fecha y hora (AN-10, AN-11, AN-13)   |
 | /citas                        | Si      | Cliente: proximas e historial, con cancelacion (AN-14). Veterinario: agenda por dia con confirmar, reprogramar y cancelar (AN-15, AN-16, AN-17) |
 | /notificaciones               | Si      | Avisos del usuario (AN-22, AN-23)              |
+| /urgencias                    | Si      | Dueño: pedir y seguir una urgencia. Veterinario: disponibilidad, urgencias abiertas y en curso |
 | /mascotas                     | Si      | Cliente: sus mascotas                          |
+| /mascotas/:id/historia        | Si      | Cliente: historia clinica de su mascota (AN-21) |
+| /pacientes/:id                | Si      | Veterinario: historia clinica de un paciente (AN-18, AN-19, AN-20) |
 | /mi-perfil                    | Si      | Veterinario: perfil, foto y tarjeta profesional |
 | /mis-servicios                | Si      | Veterinario: agregar, editar y eliminar servicios (AN-28, AN-29, AN-30) |
 | /mi-horario                   | Si      | Veterinario: horario semanal y bloqueos (AN-31) |
@@ -422,11 +551,25 @@ Los creditos y licencias de las fotografias utilizadas estan en
 
 ## Pruebas
 
-Las pruebas de la API se realizan con Postman. La documentacion de casos de prueba y evidencias
-se guardara en la carpeta `docs/`.
+| Tipo | Donde | Como se ejecutan |
+| ---- | ----- | ---------------- |
+| Unitarias del backend (zona horaria) | `backend/tests/schedule.test.js` | `node --test tests/schedule.test.js` |
+| API (criterios de aceptacion) | `backend/tests/sprint2.test.js` | `npm test` en `backend/`, con la API corriendo |
+| Unitarias y de componentes del frontend | `frontend/src/**/*.test.{js,jsx}` | `npm run test:unit` en `frontend/` |
+| Extremo a extremo (navegador) | `frontend/e2e/` | `npm run test:e2e` en `frontend/`, con API y frontend corriendo |
+
+Las pruebas de la API leen los correos enviados desde `MAIL_OUTBOX_FILE` (si se define al arrancar la
+API) para seguir los enlaces de verificacion y de recuperacion. Las pruebas e2e crean usuarios `e2e.*`
+y los borran al terminar (`backend/scripts/clean-test-data.js`). Para usar el Chrome instalado en vez
+del Chromium de Playwright: `PLAYWRIGHT_CHANNEL=chrome npm run test:e2e`.
+
+**Integracion continua:** `.github/workflows/ci.yml` ejecuta las cuatro suites en cada push y pull
+request, con una base MySQL temporal. Un pull request con pruebas fallidas queda marcado en rojo.
+
+Las evidencias manuales (Postman, capturas) se guardan en la carpeta `docs/`.
 
 Ademas, `backend/tests/sprint2.test.js` recorre automaticamente los criterios de aceptacion del
-Sprint 2, de las historias relacionadas y de las mejoras contra la API (98 casos). Con el backend corriendo, desde `backend/`:
+Sprint 2, del Sprint 3, de las mejoras y de la cuenta contra la API (146 casos). Con el backend corriendo, desde `backend/`:
 
 ```
 npm test

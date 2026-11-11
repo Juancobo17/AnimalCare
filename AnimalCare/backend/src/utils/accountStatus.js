@@ -3,11 +3,12 @@
 // Un usuario SUSPENDED o REJECTED no puede iniciar sesion ni usar un token
 // que ya tenia: el middleware lo rechaza en la siguiente peticion, lo que
 // equivale a cerrarle la sesion activa.
-const BLOCKED_STATUSES = ["SUSPENDED", "REJECTED"];
+const BLOCKED_STATUSES = ["SUSPENDED", "REJECTED", "DELETED"];
 
 const MENSAJES_BLOQUEO = {
   SUSPENDED: "Tu cuenta está suspendida. Comunícate con el administrador de AnimalCare.",
   REJECTED: "Tu solicitud de registro fue rechazada. Comunícate con el administrador de AnimalCare.",
+  DELETED: "Esta cuenta fue eliminada.",
 };
 
 // Codigo que el frontend usa para saber que debe cerrar la sesion local.

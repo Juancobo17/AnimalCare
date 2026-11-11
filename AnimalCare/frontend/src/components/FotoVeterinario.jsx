@@ -2,17 +2,7 @@
 import { useState } from "react";
 
 import { urlDeFoto } from "../services/vet.service";
-
-function obtenerIniciales(nombre = "") {
-  const palabras = nombre
-    .replace(/^(dr|dra)\.?\s+/i, "")
-    .split(/\s+/)
-    .filter(Boolean);
-  return palabras
-    .slice(0, 2)
-    .map((palabra) => palabra[0].toUpperCase())
-    .join("");
-}
+import { inicialesDe } from "../utils/nombres";
 
 function FotoVeterinario({ nombre, url, tamano = 64 }) {
   const [fallo, setFallo] = useState(false);
@@ -32,7 +22,7 @@ function FotoVeterinario({ nombre, url, tamano = 64 }) {
 
   return (
     <span className="foto-vet foto-vet-iniciales" style={estilo} role="img" aria-label={`Sin foto de ${nombre}`}>
-      {obtenerIniciales(nombre) || "?"}
+      {inicialesDe(nombre) || "?"}
     </span>
   );
 }

@@ -5,6 +5,7 @@
 // y AN-8 (inicio de sesion).
 const authService = require("../services/auth.service");
 const { isBlocked, blockedResponse } = require("../utils/accountStatus");
+const { enviarVerificacion } = require("./account.controller");
 const {
   MIN_DURATION_MINUTES: MIN_SERVICE_DURATION,
   MAX_DURATION_MINUTES: MAX_SERVICE_DURATION,
@@ -261,6 +262,11 @@ async function register(req, res) {
       errors.push("El tipo de cuenta no es valido.");
     }
 
+    // Ley 1581: el tratamiento de datos requiere consentimiento expreso.
+    if (req.body?.acceptPrivacy !== true) {
+      errors.push("Debes aceptar la política de privacidad y el tratamiento de datos.");
+    }
+
     // Los datos profesionales solo se validan si se registra un veterinario.
     let profile = null;
     if (rolSolicitado === "VETERINARIAN") {
@@ -307,6 +313,13 @@ async function register(req, res) {
       role: rolSolicitado,
       profile,
     });
+
+    // Correo de confirmacion. Si el envio falla, la cuenta ya existe: no se revierte.
+    try {
+      await enviarVerificacion(user);
+    } catch (errorCorreo) {
+      console.error("No se pudo enviar el correo de verificacion:", errorCorreo);
+    }
 
     // AN-7 escenario 8: el veterinario queda pendiente de verificacion.
     const message = rolSolicitado === "VETERINARIAN"
@@ -367,13 +380,16 @@ async function login(req, res) {
     // Se responde lo mismo si el correo no existe o si la contrasena es incorrecta,
     // para no revelar que correos estan registrados en el sistema.
     if (!user) {
+      req.rateLimit?.fail();
       return res.status(401).json({ message: MENSAJE_CREDENCIALES });
     }
 
     const passwordMatches = await authService.verifyPassword(String(password), user.password);
     if (!passwordMatches) {
+      req.rateLimit?.fail();
       return res.status(401).json({ message: MENSAJE_CREDENCIALES });
     }
+    req.rateLimit?.reset();
 
     // AN-35 / AN-37: una cuenta suspendida o rechazada no puede entrar.
     // Se comprueba DESPUES de la contrasena para no revelar el estado de

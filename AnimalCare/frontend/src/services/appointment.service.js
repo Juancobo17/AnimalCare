@@ -1,6 +1,9 @@
 // Citas: agendamiento (AN-10, AN-11, AN-13), cancelacion (AN-14, AN-15)
 // y gestion de la agenda del veterinario (AN-16, AN-17).
 import api from "./api";
+import { instanteDe, hoyLocal, sumarDias } from "./zona";
+
+export { hoyLocal, sumarDias };
 
 // POST /api/appointments
 export async function agendarCita({ vetProfileId, serviceId, petId, mode, date, time, address, notes }) {
@@ -47,9 +50,17 @@ export async function confirmarCita(id) {
   return respuesta.data;
 }
 
+// PATCH /api/appointments/:id/start
+// El veterinario inicia la atencion: la cita pasa a "en atencion" y se llena la historia clinica.
+export async function iniciarCita(id) {
+  const respuesta = await api.patch(`/appointments/${id}/start`);
+  return respuesta.data;
+}
+
 // PATCH /api/appointments/:id/complete  (AN-16)
-export async function completarCita(id) {
-  const respuesta = await api.patch(`/appointments/${id}/complete`);
+// Termina la atencion. Con mascota exige la historia clinica, salvo skipRecord (terminar sin registrar).
+export async function completarCita(id, { skipRecord = false } = {}) {
+  const respuesta = await api.patch(`/appointments/${id}/complete`, skipRecord ? { skipRecord: true } : {});
   return respuesta.data;
 }
 
@@ -70,9 +81,9 @@ export function clientePuedeCancelar(cita) {
   );
 }
 
-// Momento de inicio de la cita. Igual que el backend, se interpreta en UTC.
+// Momento de inicio de la cita, interpretando fecha y hora en la zona de la clinica.
 export function inicioDeCita(cita) {
-  return new Date(`${cita.date}T${cita.time}:00Z`);
+  return instanteDe(cita.date, cita.time);
 }
 
 export function esActiva(cita) {
@@ -84,27 +95,16 @@ export function esCancelable(cita) {
   return esActiva(cita) && inicioDeCita(cita).getTime() > Date.now();
 }
 
-// Se puede marcar como atendida cuando su hora ya llego.
+// Se puede iniciar la atencion cuando su hora ya llego.
 export function esCompletable(cita) {
   return esActiva(cita) && inicioDeCita(cita).getTime() <= Date.now();
-}
-
-// Fecha de hoy "AAAA-MM-DD" con el mismo criterio UTC de la API.
-export function hoyUTC() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-// Suma dias a una fecha "AAAA-MM-DD".
-export function sumarDias(fecha, dias) {
-  const valor = new Date(`${fecha}T00:00:00Z`);
-  valor.setUTCDate(valor.getUTCDate() + dias);
-  return valor.toISOString().slice(0, 10);
 }
 
 // Etiquetas de los estados de una cita.
 export const ESTADOS_CITA = {
   PENDING: "Pendiente",
   CONFIRMED: "Confirmada",
+  IN_PROGRESS: "En atención",
   CANCELLED: "Cancelada",
   COMPLETED: "Completada",
 };

@@ -1,0 +1,120 @@
+# Integración continua: en cada push y pull request se ejecutan las pruebas
+# del backend (API), las unitarias del frontend y las de extremo a extremo.
+# Si algo falla, el pull request queda marcado en rojo.
+#
+# El proyecto vive en la carpeta AnimalCare/ del repositorio, por eso cada
+# paso trabaja en AnimalCare/backend o AnimalCare/frontend.
+#
+# MySQL se levanta con un script (y no como "service") para poder pasarle
+# --lower-case-table-names=1: la migracion add_user_role usa la tabla `user`
+# en minuscula y la inicial la crea como `User`; Linux distingue mayusculas.
+# Node 22: el script `npm test` usa un patron con comodines (node --test "tests/**/*.test.js"),
+# que Node 20 no soporta.
+name: CI
+
+on:
+  push:
+    branches: [main, "sprint-*"]
+  pull_request:
+
+env:
+  DATABASE_URL: mysql://root:ci_password@127.0.0.1:3306/animalcare_ci
+  JWT_SECRET: clave_solo_para_ci
+  CLINIC_TIMEZONE: America/Bogota
+  REMINDERS_ENABLED: "false"
+  MAIL_TRANSPORT: console
+  FRONTEND_URL: http://localhost:5173
+
+jobs:
+  backend:
+    name: Backend (API)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AnimalCare/backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Base de datos MySQL
+        run: bash scripts/ci-mysql.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: AnimalCare/backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - name: Pruebas unitarias (zona horaria)
+        run: node --test tests/schedule.test.js
+      - name: Levantar la API
+        run: |
+          PORT=4000 MAIL_OUTBOX_FILE=$RUNNER_TEMP/outbox.jsonl node server.js > $RUNNER_TEMP/api.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:4000/api/health && break; sleep 1; done
+      - name: Pruebas de la API
+        run: MAIL_OUTBOX_FILE=$RUNNER_TEMP/outbox.jsonl npm test
+      - name: Registro de la API si algo falla
+        if: failure()
+        run: cat $RUNNER_TEMP/api.log
+
+  frontend:
+    name: Frontend (lint, unitarias, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AnimalCare/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: AnimalCare/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:unit
+      - run: npm run build
+
+  e2e:
+    name: Extremo a extremo (Playwright)
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Base de datos MySQL
+        run: bash AnimalCare/backend/scripts/ci-mysql.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Backend
+        working-directory: AnimalCare/backend
+        run: |
+          npm ci
+          npx prisma generate
+          npx prisma migrate deploy
+          PORT=4000 node server.js > $RUNNER_TEMP/api.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:4000/api/health && break; sleep 1; done
+      - name: Frontend
+        working-directory: AnimalCare/frontend
+        run: |
+          npm ci
+          VITE_API_URL=http://localhost:4000/api npm run build
+          npx vite preview --port 5173 > $RUNNER_TEMP/web.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:5173/login > /dev/null && break; sleep 1; done
+      - name: Pruebas e2e
+        working-directory: AnimalCare/frontend
+        # Se usa el Google Chrome que ya trae el ejecutor: evita descargar el
+        # navegador y sus dependencias con apt, que depende de la red.
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
+        run: npm run test:e2e
+      - name: Registros si algo falla
+        if: failure()
+        run: |
+          echo "--- API ---"; cat $RUNNER_TEMP/api.log || true
+          echo "--- Frontend ---"; cat $RUNNER_TEMP/web.log || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: AnimalCare/frontend/test-results
+          retention-days: 7
