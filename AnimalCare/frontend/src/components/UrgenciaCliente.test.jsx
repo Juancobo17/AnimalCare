@@ -43,11 +43,20 @@ describe("UrgenciaCliente", () => {
     expect(screen.getByRole("button", { name: "Pedir atención urgente" })).toBeDisabled();
   });
 
+  test("sin mascotas registradas no deja pedir la urgencia y lleva a registrarlas", async () => {
+    listarMascotas.mockResolvedValue({ pets: [] });
+    render(<UrgenciaCliente />);
+    expect(await screen.findByText(/primero registra a tu mascota/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Mis mascotas" })).toHaveAttribute("href", "/mascotas");
+    expect(screen.getByRole("button", { name: "Pedir atención urgente" })).toBeDisabled();
+  });
+
   test("valida descripcion, direccion a domicilio y telefono antes de enviar", async () => {
     render(<UrgenciaCliente />);
     await screen.findByText(/Hay 2 veterinario/);
 
     await userEvent.click(screen.getByRole("button", { name: "Pedir atención urgente" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Elige la mascota");
     expect(screen.getByRole("alert")).toHaveTextContent("Describe qué le pasa a tu mascota");
     expect(screen.getByRole("alert")).toHaveTextContent("teléfono de contacto válido");
     expect(pedirUrgencia).not.toHaveBeenCalled();
@@ -61,7 +70,7 @@ describe("UrgenciaCliente", () => {
     render(<UrgenciaCliente />);
     await screen.findByText(/Hay 2 veterinario/);
 
-    await userEvent.selectOptions(screen.getByLabelText("Mascota"), "5");
+    await userEvent.selectOptions(screen.getByLabelText(/^Mascota/), "5");
     await userEvent.type(screen.getByLabelText(/¿Qué le pasa\?/), "Vomita sin parar desde hace horas");
     await userEvent.type(screen.getByLabelText(/Teléfono de contacto/), "3001234567");
     await userEvent.click(screen.getByRole("button", { name: "Pedir atención urgente" }));

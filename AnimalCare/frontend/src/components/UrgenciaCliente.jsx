@@ -25,7 +25,7 @@ const FORMULARIO_VACIO = { petId: "", symptoms: "", mode: "CLINIC", address: "",
 function UrgenciaCliente() {
   const [estado, setEstado] = useState({ active: null, emergencies: [] });
   const [disponibilidad, setDisponibilidad] = useState(null);
-  const [mascotas, setMascotas] = useState([]);
+  const [mascotas, setMascotas] = useState(null); // null = aun cargando
   const [cargado, setCargado] = useState(false);
   const [datos, setDatos] = useState(FORMULARIO_VACIO);
   const [errores, setErrores] = useState([]);
@@ -63,6 +63,7 @@ function UrgenciaCliente() {
 
   function validar() {
     const mensajes = [];
+    if (!datos.petId) mensajes.push("Elige la mascota que necesita atención urgente.");
     if (datos.symptoms.trim().length < MIN_SINTOMAS) {
       mensajes.push(`Describe qué le pasa a tu mascota (mínimo ${MIN_SINTOMAS} caracteres).`);
     }
@@ -87,7 +88,7 @@ function UrgenciaCliente() {
     setEnviando(true);
     try {
       const r = await pedirUrgencia({
-        petId: datos.petId ? Number(datos.petId) : null,
+        petId: Number(datos.petId),
         symptoms: datos.symptoms.trim(),
         mode: datos.mode,
         address: datos.mode === "HOME" ? datos.address.trim() : null,
@@ -217,11 +218,19 @@ function UrgenciaCliente() {
             </p>
           )}
 
-          {mascotas.length > 0 && (
+          {mascotas && mascotas.length === 0 && (
+            <p className="urgencia-sin-turno">
+              Para pedir una urgencia primero registra a tu mascota en <a href="/mascotas">Mis mascotas</a>: el
+              veterinario necesita su historia clínica.
+            </p>
+          )}
+          {mascotas && mascotas.length > 0 && (
             <div className="campo">
-              <label htmlFor="urg-mascota">Mascota</label>
+              <label htmlFor="urg-mascota">
+                Mascota <span className="obligatorio">*</span>
+              </label>
               <select id="urg-mascota" name="petId" value={datos.petId} onChange={cambiar}>
-                <option value="">Sin elegir</option>
+                <option value="">Elige la mascota</option>
                 {mascotas.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.name} ({m.species})
@@ -302,7 +311,7 @@ function UrgenciaCliente() {
             <span className="ayuda">El veterinario que acepte te llamará a este número.</span>
           </div>
 
-          <button type="submit" className="boton boton-peligro-solido boton-enviar" disabled={enviando || sinVeterinarios}>
+          <button type="submit" className="boton boton-peligro-solido boton-enviar" disabled={enviando || sinVeterinarios || (mascotas !== null && mascotas.length === 0)}>
             {enviando ? "Enviando..." : "Pedir atención urgente"}
           </button>
         </form>

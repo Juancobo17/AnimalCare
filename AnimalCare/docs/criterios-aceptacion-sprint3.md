@@ -154,7 +154,7 @@ hace el sistema y cada escenario está cubierto por `backend/tests/sprint2.test.
   * **Entonces** el sistema lo informa, no crea la solicitud y sugiere acudir a la clínica más cercana.
 * **Escenario 3: Pedir la urgencia**
   * **Dado que** hay veterinarios atendiendo ahora,
-  * **Cuando** el dueño describe qué le pasa (mínimo 10 caracteres), elige la modalidad, indica la dirección si es a domicilio y un teléfono válido,
+  * **Cuando** el dueño elige la mascota (obligatoria), describe qué le pasa (mínimo 10 caracteres), elige la modalidad, indica la dirección si es a domicilio y un teléfono válido,
   * **Entonces** se avisa a los veterinarios disponibles compatibles y el dueño ve "Buscando un veterinario disponible…" con la hora límite. Solo puede tener una urgencia en curso.
 * **Escenario 4: Veterinario asignado**
   * **Dado que** un veterinario aceptó la urgencia,

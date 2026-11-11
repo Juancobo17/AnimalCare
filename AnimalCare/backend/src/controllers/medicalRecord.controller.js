@@ -206,7 +206,11 @@ async function getPetHistory(req, res) {
           status: { in: ["IN_PROGRESS", "COMPLETED"] },
           scheduledAt: { lte: new Date() },
         },
-        include: { service: { select: { name: true } }, medicalRecord: { select: { id: true } } },
+        include: {
+          service: { select: { name: true } },
+          medicalRecord: { select: { id: true } },
+          emergency: { select: { id: true } },
+        },
         orderBy: { scheduledAt: "desc" },
       });
       const resumen = (c) => ({
@@ -217,6 +221,8 @@ async function getPetHistory(req, res) {
         service: c.service ? c.service.name : "Consulta general",
         notes: c.notes,
         recordId: c.medicalRecord ? c.medicalRecord.id : null,
+        // Nacio de una urgencia: terminar sin registrar la devuelve a las urgencias abiertas.
+        emergency: Boolean(c.emergency),
       });
       // Atenciones en curso (con o sin avance guardado) y consultas ya atendidas sin registrar.
       inProgressAppointments = citas.filter((c) => c.status === "IN_PROGRESS").map(resumen);

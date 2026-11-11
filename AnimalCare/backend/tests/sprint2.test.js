@@ -1788,8 +1788,18 @@ describe("Seguridad: limite de intentos de inicio de sesion", () => {
 
 describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
   const SINTOMAS = "Mi gato vomita sin parar y no quiere moverse";
+  // La mascota es obligatoria; por defecto se usa la del cliente que pide.
   const pedir = (token, extra = {}) =>
-    http("POST", "/emergencies", { token, body: { symptoms: SINTOMAS, mode: "CLINIC", phone: "3001234567", ...extra } });
+    http("POST", "/emergencies", {
+      token,
+      body: {
+        symptoms: SINTOMAS,
+        mode: "CLINIC",
+        phone: "3001234567",
+        petId: token === ctx.clienteB ? ctx.mascotaB : ctx.mascota,
+        ...extra,
+      },
+    });
   const accion = (token, id, nombre, body) => http("PATCH", `/emergencies/${id}/${nombre}`, { token, body });
   const mia = (token) => http("GET", "/emergencies/mine", { token });
   const abiertas = (token) => http("GET", "/emergencies/open", { token });
@@ -1810,6 +1820,21 @@ describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
     assert.equal(r.status, 409);
     assert.equal(r.data.code, "NO_VETS_AVAILABLE");
     assert.match(r.data.message, /clínica veterinaria más cercana/);
+  });
+
+  test("la mascota es obligatoria al pedir una urgencia", async () => {
+    // El cliente B necesita su propia mascota para las pruebas siguientes.
+    const rexB = await http("POST", "/pets", {
+      token: ctx.clienteB,
+      body: { name: "Toby", species: "Perro", sex: "Macho", birthDate: "2020-05-05" },
+    });
+    assert.equal(rexB.status, 201, errores(rexB));
+    ctx.mascotaB = rexB.data.pet.id;
+
+    const sin = await pedir(ctx.clienteA, { petId: undefined });
+    assert.equal(sin.status, 400);
+    assert.match(sin.data.errors.join(" "), /Elige la mascota/);
+    assert.equal((await pedir(ctx.clienteA, { petId: "" })).status, 400);
   });
 
   test("valida descripcion, modalidad, direccion, telefono y la mascota", async () => {
@@ -2109,6 +2134,35 @@ describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
     assert.equal(m.data.emergencies.find((e) => e.id === u.data.emergency.id).status, "COMPLETED");
     const avisos = await http("GET", "/notifications", { token: ctx.clienteA });
     assert.match(avisos.data.notifications[0].message, /marcó tu urgencia como atendida/);
+  });
+
+  test("terminar sin registrar una urgencia la devuelve a las urgencias abiertas", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const u = await pedir(ctx.clienteA, { petId: ctx.mascota });
+    assert.equal(u.status, 201, errores(u));
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "accept")).status, 200);
+    const cita = await citaDe(u.data.emergency.id);
+    assert.equal((await http("PATCH", `/appointments/${cita.id}/start`, { token: ctx.libre })).status, 200);
+
+    const historia = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.libre });
+    assert.equal(historia.data.inProgressAppointments.find((c) => c.id === cita.id).emergency, true);
+
+    const r = await http("PATCH", `/appointments/${cita.id}/complete`, { token: ctx.libre, body: { skipRecord: true } });
+    assert.equal(r.status, 200, errores(r));
+    assert.equal(r.data.reopened, true);
+
+    // La urgencia vuelve a estar abierta, sin veterinario, con la agenda libre y plazo nuevo.
+    const m = await mia(ctx.clienteA);
+    assert.equal(m.data.active.status, "OPEN");
+    assert.equal(m.data.active.vet, null);
+    assert.equal(m.data.active.inProgress, false);
+    assert.equal((await prisma.appointment.findUnique({ where: { id: cita.id } })).status, "CANCELLED");
+    assert.ok((await abiertas(ctx.libre)).data.requests.some((x) => x.id === u.data.emergency.id), "otro puede aceptarla");
+    const aviso = await http("GET", "/notifications", { token: ctx.clienteA });
+    assert.match(aviso.data.notifications[0].message, /no puede atender tu urgencia/);
+
+    // Se limpia para las pruebas siguientes.
+    assert.equal((await accion(ctx.clienteA, u.data.emergency.id, "cancel")).status, 200);
   });
 
   test("una urgencia que nadie acepta a tiempo vence", async (t) => {
