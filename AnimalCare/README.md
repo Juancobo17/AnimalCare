@@ -112,23 +112,29 @@ Reglas de la historia clinica:
 
 ## Urgencias (lo que AN-23 llamaba "emergencias")
 
-Un dueño con una mascota en apuros pide atencion urgente y los veterinarios que estan **de turno** la reciben.
+Un dueño con una mascota en apuros pide atencion urgente y los veterinarios que estan atendiendo en ese momento
+la reciben. No hay "turnos" aparte: la disponibilidad sale de **Mi horario**.
 
-1. **El veterinario se pone de turno** por 4, 8 o 12 horas desde `/urgencias` (solo cuentas aprobadas). Al
-   vencer el plazo deja de recibir urgencias; tambien puede salir antes.
+1. **Quien recibe urgencias:** un veterinario con la cuenta aprobada, cuyo horario semanal cubre los proximos
+   30 minutos, sin un bloqueo de agenda y sin otra urgencia en curso. Las citas normales no lo impiden (ver 3).
 2. **El dueño describe la urgencia:** sintomas (10 a 500 caracteres), mascota (opcional), telefono y si la
    atencion es en la veterinaria o a domicilio (con direccion). Solo puede tener **una urgencia en curso**.
-3. **Se avisa a los veterinarios de turno compatibles** con la modalidad (una urgencia a domicilio solo llega a
-   quienes atienden a domicilio). El primero que la acepta se queda con ella: la toma es atomica, si dos la
-   aceptan a la vez solo uno la consigue. Un veterinario atiende una urgencia a la vez.
+3. **Se avisa a los veterinarios disponibles compatibles** con la modalidad (una urgencia a domicilio solo llega
+   a quienes atienden a domicilio). El primero que la acepta se queda con ella: la toma es atomica, si dos la
+   aceptan a la vez solo uno la consigue. **Al aceptar se crea una cita confirmada de 30 minutos** que ocupa su
+   agenda (aparece en Mi agenda y en las citas del dueño, y nadie mas puede agendar ese rato). Si ya tenia citas
+   en ese rato, **la urgencia tiene prioridad**: el sistema se lo avisa y, si confirma, esas citas se cancelan y
+   se pide a cada cliente que reagende.
 4. **El dueño ve quien la atiende**, con su telefono y, si es en la veterinaria, la direccion. La pantalla se
    actualiza sola cada 10 segundos.
-5. **Cierre:** el veterinario la marca como atendida, o la libera si no puede (vuelve a abrirse y se avisa a
-   los demas); el dueño puede cancelarla; si nadie la acepta en `EMERGENCY_TTL_MIN` minutos (30) vence.
+5. **Cierre:** el veterinario la marca como atendida (la cita queda atendida), o la libera si no puede (vuelve a
+   abrirse, se avisa a los demas y su agenda queda libre); el dueño puede cancelarla (la agenda tambien queda
+   libre); si nadie la acepta en `EMERGENCY_TTL_MIN` minutos (30) vence. La cita de una urgencia se gestiona desde
+   Urgencias, no se puede cancelar ni reagendar desde la agenda.
 6. **Historia clinica:** el veterinario que acepta una urgencia con una mascota accede a su historia clinica
    mientras la atiende y despues de atenderla (no si la libera).
 
-AnimalCare conecta con veterinarios de turno pero **no garantiza una respuesta**: la pantalla del dueño
+AnimalCare conecta con veterinarios disponibles pero **no garantiza una respuesta**: la pantalla del dueño
 recuerda que, si la mascota esta grave, debe acudir de inmediato a la clinica veterinaria mas cercana.
 Cada paso genera una notificacion para la otra persona.
 
@@ -426,14 +432,12 @@ maquina.
 | GET    | /api/notifications       | Si      | Cualquiera | Ultimas notificaciones del usuario             |
 | PATCH  | /api/notifications/:id/read | Si   | Cualquiera | Marca una notificacion como leida              |
 | PATCH  | /api/notifications/read-all | Si   | Cualquiera | Marca todas como leidas (AN-22, AN-23)         |
-| GET    | /api/emergencies/availability | Si | CLIENT   | Cuantos veterinarios estan de turno (total, a domicilio, en veterinaria) |
-| POST   | /api/emergencies         | Si      | CLIENT   | Pide una urgencia `{ symptoms, mode, phone, address?, petId? }` (409 si ya tiene una en curso o no hay veterinarios de turno) |
+| GET    | /api/emergencies/availability | Si | CLIENT   | Cuantos veterinarios atienden ahora segun su horario (`available`, `home`, `clinic`) |
+| POST   | /api/emergencies         | Si      | CLIENT   | Pide una urgencia `{ symptoms, mode, phone, address?, petId? }` (409 si ya tiene una en curso o no hay veterinarios atendiendo) |
 | PATCH  | /api/emergencies/:id/cancel | Si   | CLIENT   | Cancela su urgencia (abierta o aceptada)         |
 | GET    | /api/emergencies/mine    | Si      | CLIENT, VETERINARIAN | Sus urgencias; `active` es la que esta en curso |
-| GET    | /api/emergencies/duty    | Si      | VETERINARIAN | Estado del turno                              |
-| PUT    | /api/emergencies/duty    | Si      | VETERINARIAN | Se pone de turno `{ hours: 4\|8\|12 }` o sale `{ hours: 0 }` |
-| GET    | /api/emergencies/open    | Si      | VETERINARIAN | Urgencias abiertas compatibles (solo si esta de turno) |
-| PATCH  | /api/emergencies/:id/accept | Si   | VETERINARIAN | Acepta una urgencia (atomico; 409 si otro la tomo) |
+| GET    | /api/emergencies/open    | Si      | VETERINARIAN | Urgencias abiertas compatibles (solo si esta dentro de su horario) `{ available, canAttend, requests }` |
+| PATCH  | /api/emergencies/:id/accept | Si   | VETERINARIAN | Acepta una urgencia y ocupa su agenda 30 min (atomico; 409 si otro la tomo; 409 `APPOINTMENT_CONFLICT` si tiene citas en ese rato: reenviar con `{ rescheduleConflicts: true }` las cancela y pide reagendar) |
 | PATCH  | /api/emergencies/:id/complete | Si | VETERINARIAN | La marca como atendida                       |
 | PATCH  | /api/emergencies/:id/release | Si  | VETERINARIAN | La libera: vuelve a abrirse para los demas    |
 | GET    | /api/admin/users         | Si      | ADMIN    | Listado paginado (`page`, `pageSize`) con filtros `status`, `role`, `q` (AN-38) |
@@ -532,7 +536,7 @@ Con `"mode": "HOME"` el campo `address` es obligatorio: es la direccion donde se
 | /veterinarios/:id/agendar     | Si      | Modalidad, fecha y hora (AN-10, AN-11, AN-13)   |
 | /citas                        | Si      | Cliente: proximas e historial, con cancelacion (AN-14). Veterinario: agenda por dia con confirmar, reprogramar y cancelar (AN-15, AN-16, AN-17) |
 | /notificaciones               | Si      | Avisos del usuario (AN-22, AN-23)              |
-| /urgencias                    | Si      | Dueño: pedir y seguir una urgencia. Veterinario: turno, urgencias abiertas y en curso |
+| /urgencias                    | Si      | Dueño: pedir y seguir una urgencia. Veterinario: disponibilidad, urgencias abiertas y en curso |
 | /mascotas                     | Si      | Cliente: sus mascotas                          |
 | /mascotas/:id/historia        | Si      | Cliente: historia clinica de su mascota (AN-21) |
 | /pacientes/:id                | Si      | Veterinario: historia clinica de un paciente (AN-18, AN-19, AN-20) |

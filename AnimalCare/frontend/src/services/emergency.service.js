@@ -6,7 +6,7 @@ import { ZONA_HORARIA } from "./zona";
 
 export async function disponibilidadUrgencias() {
   const respuesta = await api.get("/emergencies/availability");
-  return respuesta.data; // { onDuty, home, clinic, ttlMinutes }
+  return respuesta.data; // { available, home, clinic, ttlMinutes }
 }
 
 export async function pedirUrgencia(datos) {
@@ -27,24 +27,14 @@ export async function misUrgencias() {
 
 // ---------- Veterinario ----------
 
-export async function estadoDeTurno() {
-  const respuesta = await api.get("/emergencies/duty");
-  return respuesta.data; // { active, until, hoursOptions, canGoOnDuty }
-}
-
-// hours: 4, 8 o 12; 0 para salir de turno.
-export async function ponerseDeTurno(hours) {
-  const respuesta = await api.put("/emergencies/duty", { hours });
-  return respuesta.data;
-}
-
 export async function urgenciasAbiertas() {
   const respuesta = await api.get("/emergencies/open");
-  return respuesta.data; // { onDuty, requests }
+  return respuesta.data; // { available, canAttend, requests }
 }
 
-export async function aceptarUrgencia(id) {
-  const respuesta = await api.patch(`/emergencies/${id}/accept`);
+// reagendar: confirma que las citas que se cruzan se cancelan y se pide a esos clientes que reagenden.
+export async function aceptarUrgencia(id, reagendar = false) {
+  const respuesta = await api.patch(`/emergencies/${id}/accept`, reagendar ? { rescheduleConflicts: true } : {});
   return respuesta.data;
 }
 

@@ -18,8 +18,6 @@ router.patch("/:id/cancel", requireRole("CLIENT"), e.cancelEmergency);
 router.get("/mine", requireRole("CLIENT", "VETERINARIAN"), e.listMine);
 
 // Veterinario
-router.get("/duty", requireRole("VETERINARIAN"), e.getDuty);
-router.put("/duty", requireRole("VETERINARIAN"), e.setDuty);
 router.get("/open", requireRole("VETERINARIAN"), e.listOpen);
 router.patch("/:id/accept", requireRole("VETERINARIAN"), e.acceptEmergency);
 router.patch("/:id/complete", requireRole("VETERINARIAN"), e.completeEmergency);

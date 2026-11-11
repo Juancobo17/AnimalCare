@@ -122,36 +122,40 @@ hace el sistema y cada escenario está cubierto por `backend/tests/sprint2.test.
 
 * **Escenario 3: Emergencias (urgencias)**
   * **Dado que** un dueño pide atención urgente para su mascota,
-  * **Cuando** el veterinario está de turno y la modalidad pedida (veterinaria o domicilio) es una de las que atiende,
+  * **Cuando** el veterinario está dentro de su horario de atención (Mi horario), sin bloqueos, y la modalidad pedida (veterinaria o domicilio) es una de las que atiende,
   * **Entonces** recibe una notificación "URGENCIA…" con el nombre del dueño, la mascota y un resumen de los síntomas, y la ve en la sección "Urgencias".
-* **Escenario 4: Ponerse de turno**
+* **Escenario 4: Disponibilidad según Mi horario**
   * **Dado que** el veterinario tiene la cuenta aprobada,
-  * **Cuando** elige "De turno 4, 8 o 12 horas" en "Urgencias",
-  * **Entonces** recibe urgencias hasta que termina el turno o pulsa "Salir de turno". Un veterinario pendiente de aprobación no puede ponerse de turno.
+  * **Cuando** la hora actual cae dentro de su horario semanal (los próximos 30 minutos), sin un bloqueo de agenda y sin otra urgencia en curso,
+  * **Entonces** está disponible y recibe urgencias, sin ponerse "de turno" aparte. Fuera de su horario, con un bloqueo, o con una cuenta sin aprobar, no recibe ni puede aceptar urgencias.
 * **Escenario 5: Aceptar una urgencia**
   * **Dado que** hay una urgencia abierta,
   * **Cuando** el veterinario pulsa "Aceptar",
-  * **Entonces** el caso queda a su nombre, ve el teléfono del dueño y el dueño recibe una notificación con su teléfono. Si otro veterinario la aceptó antes, o venció, se le informa. No puede aceptar otra mientras tiene una en curso.
+  * **Entonces** el caso queda a su nombre, ve el teléfono del dueño y el dueño recibe una notificación con su teléfono. Se crea una cita confirmada de 30 minutos que ocupa su agenda. Si otro veterinario la aceptó antes, o venció, se le informa. No puede aceptar otra mientras tiene una en curso.
+* **Escenario 5b: Urgencia con citas en ese horario**
+  * **Dado que** el veterinario tiene citas que se cruzan con los próximos 30 minutos,
+  * **Cuando** pulsa "Aceptar",
+  * **Entonces** el sistema le muestra esas citas y le pide confirmar; si confirma ("Aceptar y pedir que reagenden"), esas citas se cancelan y cada cliente recibe una notificación pidiéndole que reagende, porque la urgencia tiene prioridad. Si no confirma, nada cambia.
 * **Escenario 6: Cerrar o liberar**
   * **Dado que** el veterinario tiene una urgencia en curso,
-  * **Cuando** pulsa "Marcar como atendida", se cierra y el dueño es notificado; si pulsa "No puedo atenderla", la urgencia se abre de nuevo para los demás y el dueño es notificado.
+  * **Cuando** pulsa "Marcar como atendida", se cierra y el dueño es notificado; si pulsa "No puedo atenderla", la urgencia se abre de nuevo para los demás, el dueño es notificado y su agenda queda libre.
 
 ## Urgencias — criterios del dueño de mascota
 
-*Yo como dueño de mascota quiero pedir atención urgente para recibir ayuda de un veterinario de turno lo antes posible.*
+*Yo como dueño de mascota quiero pedir atención urgente para recibir ayuda de un veterinario disponible lo antes posible.*
 
 * **Escenario 1: Aviso de emergencia vital**
   * **Dado que** el dueño entra a "Urgencias",
   * **Cuando** la página carga,
   * **Entonces** ve el aviso de que, si su mascota está inconsciente, convulsiona, no respira o sangra mucho, debe acudir de inmediato a la clínica veterinaria más cercana, y que AnimalCare no garantiza una respuesta.
-* **Escenario 2: Veterinarios de turno**
+* **Escenario 2: Veterinarios disponibles**
   * **Dado que** el dueño quiere pedir una urgencia,
-  * **Cuando** no hay veterinarios de turno para la modalidad elegida,
+  * **Cuando** no hay veterinarios atendiendo en este momento para la modalidad elegida,
   * **Entonces** el sistema lo informa, no crea la solicitud y sugiere acudir a la clínica más cercana.
 * **Escenario 3: Pedir la urgencia**
-  * **Dado que** hay veterinarios de turno,
+  * **Dado que** hay veterinarios atendiendo ahora,
   * **Cuando** el dueño describe qué le pasa (mínimo 10 caracteres), elige la modalidad, indica la dirección si es a domicilio y un teléfono válido,
-  * **Entonces** se avisa a los veterinarios de turno compatibles y el dueño ve "Buscando un veterinario de turno…" con la hora límite. Solo puede tener una urgencia en curso.
+  * **Entonces** se avisa a los veterinarios disponibles compatibles y el dueño ve "Buscando un veterinario disponible…" con la hora límite. Solo puede tener una urgencia en curso.
 * **Escenario 4: Veterinario asignado**
   * **Dado que** un veterinario aceptó la urgencia,
   * **Cuando** el dueño mira "Urgencias" (la pantalla se actualiza sola cada 10 segundos),
