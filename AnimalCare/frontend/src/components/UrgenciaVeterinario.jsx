@@ -234,7 +234,7 @@ function UrgenciaVeterinario() {
                   </div>
                   <button
                     type="button"
-                    className="boton boton-peligro-solido boton-auto"
+                    className="boton boton-primario boton-auto"
                     disabled={ocupado === `aceptar-${u.id}` || Boolean(activa)}
                     title={activa ? "Termina la urgencia en curso para aceptar otra" : undefined}
                     onClick={() => aceptar(u.id)}
