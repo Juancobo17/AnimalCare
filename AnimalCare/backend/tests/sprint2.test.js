@@ -101,7 +101,7 @@ function registroVeterinario(email, license, name = NOMBRE_VET) {
 before(async () => {
   // Si el cliente de Prisma no conoce las tablas del Sprint 2, la limpieza
   // final no podria borrar lo que se cree: se detiene antes de empezar.
-  if (!prisma.notification || !prisma.scheduleBlock || !prisma.review) {
+  if (!prisma.notification || !prisma.scheduleBlock || !prisma.review || !prisma.medicalRecord) {
     throw new Error("El cliente de Prisma está desactualizado. Ejecuta `npx prisma generate` y reinicia el backend.");
   }
 
@@ -153,6 +153,9 @@ after(async () => {
   const vetIds = usuarios.filter((u) => u.vetProfile).map((u) => u.vetProfile.id);
 
   await prisma.notification.deleteMany({ where: { userId: { in: userIds } } });
+  await prisma.medicalRecord.deleteMany({
+    where: { OR: [{ pet: { userId: { in: userIds } } }, { vetProfileId: { in: vetIds } }] },
+  });
   await prisma.review.deleteMany({
     where: { OR: [{ clientId: { in: userIds } }, { vetProfileId: { in: vetIds } }] },
   });
@@ -309,6 +312,7 @@ describe("AN-35 y AN-38: verificacion de veterinarios y listado de usuarios", ()
   test("al rechazar, la cuenta queda denegada y no puede iniciar sesion (criterio 3)", async () => {
     const reg = await registroVeterinario(ctx.emails.vet2, `QB${RUN}`, `Vet Rechazado ${RUN}`);
     assert.equal(reg.status, 201, errores(reg));
+    ctx.vet2Id = reg.data.user.id;
     const r = await http("PATCH", `/admin/users/${reg.data.user.id}/reject`, { token: ctx.admin });
     assert.equal(r.status, 200);
     assert.equal(r.data.user.status, "REJECTED");
@@ -961,6 +965,201 @@ describe("Mejora: resenas despues de una cita atendida", () => {
   });
 });
 
+// ======================= Sprint 3: historias clinicas =======================
+
+describe("AN-18: crear historia clinica", () => {
+  test("un veterinario sin citas con la mascota no puede verla ni escribir en ella", async () => {
+    const rocky = await http("POST", "/pets", {
+      token: ctx.clienteA,
+      body: { name: "Rocky", species: "Perro", sex: "Macho", birthDate: "2020-01-15" },
+    });
+    assert.equal(rocky.status, 201, errores(rocky));
+    ctx.rocky = rocky.data.pet.id;
+
+    assert.equal((await http("GET", `/medical-records/pets/${ctx.rocky}`, { token: ctx.vet })).status, 404);
+    const r = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.rocky, reason: "Control", diagnosis: "Sano" },
+    });
+    assert.equal(r.status, 404);
+  });
+
+  test("valida los campos obligatorios y los rangos", async () => {
+    const vacio = await http("POST", "/medical-records", { token: ctx.vet, body: { petId: ctx.mascota } });
+    assert.equal(vacio.status, 400);
+    assert.equal(vacio.data.errors.length, 2);
+    const fiebre = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, reason: "Fiebre", diagnosis: "x", temperature: "50" },
+    });
+    assert.equal(fiebre.status, 400);
+    const futura = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, reason: "x", diagnosis: "x", visitDate: "2099-01-01" },
+    });
+    assert.equal(futura.status, 400);
+  });
+
+  test("el veterinario registra la consulta de una cita atendida y se avisa al dueño", async () => {
+    const r = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: {
+        petId: ctx.mascota,
+        appointmentId: ctx.citaResena,
+        reason: "Vómito ocasional",
+        diagnosis: "Gastritis leve",
+        treatment: "Dieta blanda por 3 días",
+        weight: "4.8",
+        temperature: "38.6",
+        vaccines: "Triple felina (refuerzo)",
+      },
+    });
+    assert.equal(r.status, 201, errores(r));
+    assert.equal(r.data.record.appointmentId, ctx.citaResena);
+    assert.equal(r.data.record.canEdit, true);
+    ctx.entrada = r.data.record.id;
+
+    // El peso medido pasa a ser el peso actual de la mascota.
+    const mascotas = await http("GET", "/pets", { token: ctx.clienteA });
+    assert.equal(mascotas.data.pets.find((p) => p.id === ctx.mascota).weight, 4.8);
+
+    const avisos = await http("GET", "/notifications", { token: ctx.clienteA });
+    assert.match(avisos.data.notifications[0].message, /agregó una entrada a la historia clínica de Michi/);
+
+    const citas = await http("GET", "/appointments", { token: ctx.vet });
+    assert.equal(citas.data.appointments.find((c) => c.id === ctx.citaResena).medicalRecordId, ctx.entrada);
+  });
+
+  test("una cita solo admite una entrada", async () => {
+    const r = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, appointmentId: ctx.citaResena, reason: "x", diagnosis: "x" },
+    });
+    assert.equal(r.status, 409);
+  });
+
+  test("tambien se puede registrar una entrada sin cita asociada", async () => {
+    const r = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, reason: "Llamada de seguimiento", diagnosis: "Evoluciona bien" },
+    });
+    assert.equal(r.status, 201, errores(r));
+    ctx.entrada2 = r.data.record.id;
+  });
+
+  test("un cliente no puede escribir en la historia", async () => {
+    const r = await http("POST", "/medical-records", {
+      token: ctx.clienteA,
+      body: { petId: ctx.mascota, reason: "x", diagnosis: "x" },
+    });
+    assert.equal(r.status, 403);
+  });
+});
+
+describe("AN-21: el dueño accede a la historia clinica de su mascota", () => {
+  test("ve las entradas de su mascota, de la mas reciente a la mas antigua", async () => {
+    const r = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.clienteA });
+    assert.equal(r.status, 200, errores(r));
+    assert.equal(r.data.pet.name, "Michi");
+    assert.equal(r.data.records.length, 2);
+    const primera = r.data.records.find((e) => e.id === ctx.entrada);
+    assert.equal(primera.diagnosis, "Gastritis leve");
+    assert.equal(primera.vet.name, NOMBRE_VET);
+    assert.ok(!("status" in primera), "el dueño no ve datos internos de auditoria");
+  });
+
+  test("otro cliente no puede ver la historia", async () => {
+    assert.equal((await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.clienteB })).status, 404);
+  });
+
+  test("el veterinario ve ademas sus citas pasadas sin registrar", async () => {
+    const r = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.vet });
+    assert.equal(r.status, 200);
+    assert.ok(Array.isArray(r.data.pendingAppointments));
+    assert.ok(!r.data.pendingAppointments.some((c) => c.id === ctx.citaResena), "la cita ya registrada no aparece");
+  });
+});
+
+describe("AN-20: modificar historia clinica", () => {
+  test("el autor modifica su entrada", async () => {
+    const r = await http("PUT", `/medical-records/${ctx.entrada}`, {
+      token: ctx.vet,
+      body: { reason: "Vómito ocasional", diagnosis: "Gastritis leve por cambio de alimento", treatment: "Dieta blanda" },
+    });
+    assert.equal(r.status, 200, errores(r));
+    assert.equal(r.data.record.diagnosis, "Gastritis leve por cambio de alimento");
+  });
+
+  test("otro veterinario que atiende a la mascota ve la historia pero no puede modificarla", async () => {
+    // Se habilita un segundo veterinario y la mascota tiene cita con el.
+    assert.equal((await http("PATCH", `/admin/users/${ctx.vet2Id}/approve`, { token: ctx.admin })).status, 200);
+    const perfil2 = await http("GET", `/vets?q=${encodeURIComponent(`Vet Rechazado ${RUN}`)}`, { token: ctx.clienteA });
+    const cita = await http("POST", "/appointments", {
+      token: ctx.clienteA,
+      body: { vetProfileId: perfil2.data.vets[0].id, petId: ctx.mascota, mode: "CLINIC", date: JUEVES, time: "09:00" },
+    });
+    assert.equal(cita.status, 201, errores(cita));
+    const vet2 = await tokenDe(ctx.emails.vet2);
+
+    const historia = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: vet2 });
+    assert.equal(historia.status, 200);
+    assert.equal(historia.data.records.find((e) => e.id === ctx.entrada).canEdit, false);
+
+    const r = await http("PUT", `/medical-records/${ctx.entrada}`, {
+      token: vet2,
+      body: { reason: "x", diagnosis: "x" },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test("el cliente no puede modificar entradas", async () => {
+    const r = await http("PUT", `/medical-records/${ctx.entrada}`, {
+      token: ctx.clienteA,
+      body: { reason: "x", diagnosis: "x" },
+    });
+    assert.equal(r.status, 403);
+  });
+});
+
+describe("AN-19: eliminar historia clinica", () => {
+  test("pide un motivo para eliminar", async () => {
+    const r = await http("PATCH", `/medical-records/${ctx.entrada2}/annul`, { token: ctx.vet, body: {} });
+    assert.equal(r.status, 400);
+  });
+
+  test("al eliminar, el dueño deja de verla y el veterinario la ve anulada con su motivo", async () => {
+    const r = await http("PATCH", `/medical-records/${ctx.entrada2}/annul`, {
+      token: ctx.vet,
+      body: { reason: "Registrada por error en otra mascota" },
+    });
+    assert.equal(r.status, 200, errores(r));
+    assert.equal(r.data.record.status, "ANNULLED");
+
+    const dueño = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.clienteA });
+    assert.deepEqual(dueño.data.records.map((e) => e.id), [ctx.entrada]);
+
+    const vet = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.vet });
+    const anulada = vet.data.records.find((e) => e.id === ctx.entrada2);
+    assert.deepEqual(
+      { status: anulada.status, annulReason: anulada.annulReason, canEdit: anulada.canEdit },
+      { status: "ANNULLED", annulReason: "Registrada por error en otra mascota", canEdit: false }
+    );
+  });
+
+  test("una entrada eliminada no se puede modificar ni volver a eliminar", async () => {
+    const editar = await http("PUT", `/medical-records/${ctx.entrada2}`, {
+      token: ctx.vet,
+      body: { reason: "x", diagnosis: "x" },
+    });
+    assert.equal(editar.status, 409);
+    const otraVez = await http("PATCH", `/medical-records/${ctx.entrada2}/annul`, {
+      token: ctx.vet,
+      body: { reason: "x" },
+    });
+    assert.equal(otraVez.status, 409);
+  });
+});
+
 describe("Mejora: buscador con filtros, orden y proximo turno", () => {
   test("cada veterinario trae su proximo turno libre", async () => {
     const servicio = await http("POST", "/vets/me/services", {
@@ -978,7 +1177,10 @@ describe("Mejora: buscador con filtros, orden y proximo turno", () => {
 
   test("filtra por zona del consultorio", async () => {
     const r = await http("GET", `/vets?zone=QA${RUN}`, { token: ctx.clienteB });
-    assert.deepEqual(r.data.vets.map((v) => v.id), [ctx.vetProfileId]);
+    assert.ok(r.data.vets.some((v) => v.id === ctx.vetProfileId));
+    assert.ok(r.data.vets.every((v) => v.address.includes(`QA${RUN}`)));
+    const otraZona = await http("GET", "/vets?zone=zona-que-no-existe", { token: ctx.clienteB });
+    assert.equal(otraZona.data.total, 0);
   });
 
   test("filtra por precio maximo", async () => {

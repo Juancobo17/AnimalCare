@@ -9,6 +9,7 @@ const APPOINTMENT_INCLUDE = {
   service: { select: { id: true, name: true, price: true, durationMinutes: true } },
   pet: { select: { id: true, name: true, species: true } },
   review: { select: { rating: true, comment: true } },
+  medicalRecord: { select: { id: true } },
   vetProfile: {
     include: { user: { select: { id: true, name: true, email: true } } },
   },
@@ -98,6 +99,8 @@ function toPublicAppointment(appointment) {
       ? { id: appointment.pet.id, name: appointment.pet.name, species: appointment.pet.species }
       : null,
     review: appointment.review ? { rating: appointment.review.rating, comment: appointment.review.comment } : null,
+    // Entrada de historia clinica registrada para esta cita (AN-18).
+    medicalRecordId: appointment.medicalRecord ? appointment.medicalRecord.id : null,
     service: appointment.service
       ? {
           id: appointment.service.id,

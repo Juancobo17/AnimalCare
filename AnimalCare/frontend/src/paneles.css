@@ -1239,3 +1239,92 @@
     white-space: nowrap;
   }
 }
+
+/* ---------- Historias clinicas (AN-18 a AN-21) ---------- */
+
+.historia {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entrada {
+  position: relative;
+  padding: 16px 0 16px 20px;
+  border-left: 3px solid var(--verde-200);
+}
+
+.entrada + .entrada {
+  margin-top: 4px;
+}
+
+.entrada::before {
+  content: "";
+  position: absolute;
+  top: 22px;
+  left: -8px;
+  width: 13px;
+  height: 13px;
+  background-color: var(--verde-600);
+  border: 2px solid var(--blanco);
+  border-radius: 50%;
+}
+
+.entrada h4 {
+  margin: 6px 0 8px;
+}
+
+.entrada-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.entrada-datos {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.entrada-datos dt {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.entrada-datos dd {
+  margin: 2px 0 0;
+  white-space: pre-line;
+}
+
+.entrada-anulada {
+  border-left-color: var(--borde);
+}
+
+.entrada-anulada::before {
+  background-color: #c4c9d0;
+}
+
+/* Al imprimir la historia solo se ve su contenido. */
+@media print {
+  .cabecera,
+  .aviso-verificacion,
+  .no-imprimir,
+  .alerta {
+    display: none !important;
+  }
+
+  .pagina,
+  body {
+    background: #fff;
+  }
+
+  .tarjeta {
+    box-shadow: none;
+    border: 0;
+  }
+}
+
