@@ -15,6 +15,27 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// AN-37: si el administrador suspende o rechaza la cuenta mientras la sesion
+// esta abierta, el backend responde 403 con code ACCOUNT_BLOCKED. Se borra la
+// sesion local y se vuelve al login con el motivo.
+// El login no entra aqui: ahi el mensaje se muestra en el propio formulario.
+api.interceptors.response.use(
+  (respuesta) => respuesta,
+  (error) => {
+    const datos = error.response?.data;
+    const esLogin = error.config?.url === "/auth/login";
+
+    if (!esLogin && error.response?.status === 403 && datos?.code === "ACCOUNT_BLOCKED") {
+      localStorage.removeItem("token");
+      localStorage.removeItem("usuario");
+      sessionStorage.setItem("avisoSesion", datos.message);
+      window.location.assign("/login");
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 export default api;
 
 // Convierte la respuesta de error del backend en una lista de mensajes

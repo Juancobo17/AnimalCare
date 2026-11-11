@@ -240,7 +240,7 @@ function Register() {
 
       setExito([
         esVeterinario
-          ? "Tu cuenta profesional fue creada y está pendiente de verificación. Ya puedes iniciar sesión."
+          ? "Registro exitoso. Tu perfil está en revisión para validar tu tarjeta profesional."
           : "Tu cuenta fue creada correctamente. Ya puedes iniciar sesión.",
       ]);
 
@@ -259,7 +259,7 @@ function Register() {
     <AuthLayout ancho={esVeterinario}>
       <h1>Crear cuenta</h1>
       <p className="auth-subtitulo">
-        Elige cómo quieres usar AnimalCare. Podrás cambiar de cuenta cuando quieras.
+        Elige cómo quieres usar AnimalCare.
       </p>
 
       <Alerta tipo="exito" mensajes={exito} />
@@ -541,7 +541,7 @@ function Register() {
               </button>
             )}
 
-            <p className="ayuda ayuda-bloque">
+            <p className="ayuda ayuda-horario">
               Tu horario inicial será de lunes a viernes, de 9:00 a 13:00 y de 14:00 a 18:00.
             </p>
           </>

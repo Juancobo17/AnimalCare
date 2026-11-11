@@ -7,6 +7,12 @@ import Veterinarios from "./pages/Veterinarios";
 import VeterinarioDetalle from "./pages/VeterinarioDetalle";
 import AgendarCita from "./pages/AgendarCita";
 import MisCitas from "./pages/MisCitas";
+import MisServicios from "./pages/MisServicios";
+import MiHorario from "./pages/MiHorario";
+import AdminUsuarios from "./pages/AdminUsuarios";
+import NotificacionesPagina from "./pages/NotificacionesPagina";
+import MisMascotas from "./pages/MisMascotas";
+import MiPerfil from "./pages/MiPerfil";
 import RutaPrivada from "./components/RutaPrivada";
 
 function App() {
@@ -32,7 +38,7 @@ function App() {
         <Route
           path="/veterinarios"
           element={
-            <RutaPrivada>
+            <RutaPrivada roles={["CLIENT"]}>
               <Veterinarios />
             </RutaPrivada>
           }
@@ -40,7 +46,7 @@ function App() {
         <Route
           path="/veterinarios/:id"
           element={
-            <RutaPrivada>
+            <RutaPrivada roles={["CLIENT"]}>
               <VeterinarioDetalle />
             </RutaPrivada>
           }
@@ -48,7 +54,7 @@ function App() {
         <Route
           path="/veterinarios/:id/agendar"
           element={
-            <RutaPrivada>
+            <RutaPrivada roles={["CLIENT"]}>
               <AgendarCita />
             </RutaPrivada>
           }
@@ -56,8 +62,63 @@ function App() {
         <Route
           path="/citas"
           element={
-            <RutaPrivada>
+            <RutaPrivada roles={["CLIENT", "VETERINARIAN"]}>
               <MisCitas />
+            </RutaPrivada>
+          }
+        />
+
+        {/* Panel del veterinario: AN-28, AN-29, AN-30 y AN-31 */}
+        <Route
+          path="/mis-servicios"
+          element={
+            <RutaPrivada roles={["VETERINARIAN"]}>
+              <MisServicios />
+            </RutaPrivada>
+          }
+        />
+        <Route
+          path="/mi-horario"
+          element={
+            <RutaPrivada roles={["VETERINARIAN"]}>
+              <MiHorario />
+            </RutaPrivada>
+          }
+        />
+
+        <Route
+          path="/mascotas"
+          element={
+            <RutaPrivada roles={["CLIENT"]}>
+              <MisMascotas />
+            </RutaPrivada>
+          }
+        />
+        <Route
+          path="/mi-perfil"
+          element={
+            <RutaPrivada roles={["VETERINARIAN"]}>
+              <MiPerfil />
+            </RutaPrivada>
+          }
+        />
+
+        {/* AN-22 y AN-23 */}
+        <Route
+          path="/notificaciones"
+          element={
+            <RutaPrivada roles={["CLIENT", "VETERINARIAN"]}>
+              <NotificacionesPagina />
+            </RutaPrivada>
+          }
+        />
+
+        {/* Administrador: AN-35, AN-37 y AN-38 */}
+        <Route
+          path="/admin/usuarios"
+          element={
+            <RutaPrivada roles={["ADMIN"]}>
+              <AdminUsuarios />
             </RutaPrivada>
           }
         />
