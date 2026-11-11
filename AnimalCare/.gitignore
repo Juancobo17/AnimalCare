@@ -1,0 +1,16 @@
+# Dependencias y compilados
+node_modules/
+dist/
+
+# Variables de entorno con secretos
+.env
+.env.local
+.env.*.local
+
+# Archivos subidos por los usuarios
+backend/uploads/
+
+# Resultados de pruebas
+frontend/test-results/
+frontend/playwright-report/
+coverage/

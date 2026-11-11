@@ -40,6 +40,7 @@ async function authenticate(req, res, next) {
         email: true,
         role: true,
         status: true,
+        emailVerifiedAt: true,
         createdAt: true,
         // El perfil profesional solo existe si la cuenta es de un veterinario.
         vetProfile: {
@@ -65,7 +66,7 @@ async function authenticate(req, res, next) {
     }
 
     // Queda disponible para los controladores: req.user.id es el propietario.
-    req.user = user;
+    req.user = { ...user, emailVerified: Boolean(user.emailVerifiedAt) };
     return next();
   } catch (error) {
     console.error("Error en el middleware de autenticacion:", error);

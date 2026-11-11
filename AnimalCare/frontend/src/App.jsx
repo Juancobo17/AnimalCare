@@ -14,6 +14,11 @@ import NotificacionesPagina from "./pages/NotificacionesPagina";
 import MisMascotas from "./pages/MisMascotas";
 import MiPerfil from "./pages/MiPerfil";
 import HistoriaClinica from "./pages/HistoriaClinica";
+import RecuperarContrasena from "./pages/RecuperarContrasena";
+import RestablecerContrasena from "./pages/RestablecerContrasena";
+import VerificarCorreo from "./pages/VerificarCorreo";
+import MiCuenta from "./pages/MiCuenta";
+import Privacidad from "./pages/Privacidad";
 import RutaPrivada from "./components/RutaPrivada";
 
 function App() {
@@ -26,6 +31,10 @@ function App() {
         {/* Rutas publicas */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/recuperar" element={<RecuperarContrasena />} />
+        <Route path="/restablecer" element={<RestablecerContrasena />} />
+        <Route path="/verificar-correo" element={<VerificarCorreo />} />
+        <Route path="/privacidad" element={<Privacidad />} />
 
         {/* Rutas privadas: requieren sesion activa */}
         <Route
@@ -117,6 +126,15 @@ function App() {
           element={
             <RutaPrivada roles={["VETERINARIAN"]}>
               <MiPerfil />
+            </RutaPrivada>
+          }
+        />
+
+        <Route
+          path="/mi-cuenta"
+          element={
+            <RutaPrivada>
+              <MiCuenta />
             </RutaPrivada>
           }
         />

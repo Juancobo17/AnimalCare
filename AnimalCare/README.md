@@ -116,6 +116,20 @@ navegador. En la base de datos se guardan instantes (UTC). Las utilidades estan 
 Las bases creadas antes de este cambio guardaban la hora de pared como si fuera UTC. Para corregirlas
 una sola vez: `node scripts/fix-timezone-data.js --aplicar` (sin `--aplicar` solo muestra que cambiaria).
 
+## Cuenta, privacidad y seguridad
+
+- **Consentimiento (Ley 1581):** el registro exige aceptar la politica de privacidad (`/privacidad`).
+- **Verificacion de correo:** al registrarse se envia un enlace; mientras no se confirme se muestra un
+  aviso con la opcion de reenviarlo. No bloquea el uso de la plataforma.
+- **Recuperar contrasena:** `/recuperar` envia un enlace de un solo uso que vence en 60 minutos.
+- **Mi cuenta (`/mi-cuenta`):** editar el nombre, cambiar la contrasena y eliminar la cuenta. Eliminar
+  anonimiza los datos personales, cancela las citas futuras y conserva citas pasadas, resenas e
+  historias clinicas sin identificar a la persona.
+- **Correo:** `MAIL_TRANSPORT=console` (por defecto) imprime los correos en la consola del servidor;
+  `MAIL_TRANSPORT=smtp` los envia con `SMTP_URL` y `MAIL_FROM`.
+- **Seguridad HTTP:** cabeceras de proteccion, CORS restringido a `CORS_ORIGIN`, y maximo 5 intentos
+  fallidos de inicio de sesion por IP y correo cada 15 minutos (`LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCK_MINUTES`).
+
 ### Mejoras de experiencia de usuario
 
 Se agregaron tomando como referencia las plataformas de agendamiento veterinario habituales:
@@ -281,6 +295,12 @@ JWT_EXPIRES_IN="2h"
 | `REMINDERS_ENABLED` | `true` | `false` desactiva los recordatorios (por ejemplo en un servidor de pruebas) |
 | `REMINDER_INTERVAL_MS` | `600000` | Cada cuanto se revisan las citas para recordar |
 | `CLINIC_TIMEZONE` | `America/Bogota` | Zona horaria de la agenda |
+| `CORS_ORIGIN` | `http://localhost:5173,http://127.0.0.1:5173` | Origenes del frontend autorizados (separados por coma) |
+| `FRONTEND_URL` | `http://localhost:5173` | Base de los enlaces que van en los correos |
+| `TRUST_PROXY` | `false` | `true` detras de nginx o Docker, para leer la IP real |
+| `MAIL_TRANSPORT` | `console` | `console` o `smtp` |
+| `SMTP_URL`, `MAIL_FROM` | - | Solo con `MAIL_TRANSPORT=smtp` |
+| `LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCK_MINUTES` | `5`, `15` | Limite de intentos de inicio de sesion |
 
 ## Instalacion
 
@@ -314,13 +334,30 @@ cd frontend
 npm run dev
 ```
 
+Con Docker (base de datos, API y frontend con nginx en http://localhost:8080):
+
+```bash
+docker compose up --build
+```
+
+La API aplica las migraciones al arrancar; las fotos y tarjetas profesionales quedan en el volumen
+`uploads`. Cambia las contrasenas y `JWT_SECRET` de `docker-compose.yml` antes de usarlo fuera de tu
+maquina.
+
 ## Endpoints
 
 | Metodo | Ruta                     | Privada | Rol      | Descripcion                                      |
 | ------ | ------------------------ | ------- | -------- | ------------------------------------------------ |
 | GET    | /api/health              | No      | -        | Comprueba API y conexion con MySQL               |
 | POST   | /api/auth/register       | No      | -        | Registra un cliente (AN-6) o un veterinario (AN-7) |
-| POST   | /api/auth/login          | No      | -        | Valida credenciales y devuelve un JWT (AN-8)     |
+| POST   | /api/auth/login          | No      | -        | Valida credenciales y devuelve un JWT (AN-8). 429 tras 5 fallos |
+| POST   | /api/auth/forgot-password | No     | -        | Envia el enlace de recuperacion `{ email }`      |
+| POST   | /api/auth/reset-password | No      | -        | Cambia la contrasena con el enlace `{ token, password }` |
+| POST   | /api/auth/verify-email   | No      | -        | Confirma el correo `{ token }`                   |
+| PUT    | /api/account             | Si      | Cualquiera | Edita el nombre                                |
+| PUT    | /api/account/password    | Si      | Cualquiera | Cambia la contrasena `{ currentPassword, newPassword }` |
+| DELETE | /api/account             | Si      | CLIENT, VETERINARIAN | Elimina (anonimiza) la cuenta `{ password }` |
+| POST   | /api/account/resend-verification | Si | Cualquiera | Reenvia el enlace de confirmacion         |
 | GET    | /api/auth/me             | Si      | Cualquiera | Devuelve el usuario del token                  |
 | GET    | /api/vets                | Si      | Cualquiera | Lista veterinarios activos con `nextSlot`. Filtros: `q` (AN-27), `specialty`, `mode`, `zone`, `maxPrice`, `today=true`, `sort=next\|price\|rating` |
 | GET    | /api/vets/:id/days       | Si      | Cualquiera | Proximos 14 dias con la cantidad de turnos libres. Filtros `mode`, `serviceId` |
@@ -444,6 +481,10 @@ Con `"mode": "HOME"` el campo `address` es obligatorio: es la direccion donde se
 | ----------------------------- | ------- | ----------------------------------------------- |
 | /login                        | No      | Inicio de sesion (AN-8)                         |
 | /register                     | No      | Registro de cliente o veterinario (AN-6, AN-7)  |
+| /recuperar, /restablecer      | No      | Recuperar contrasena                            |
+| /verificar-correo             | No      | Confirmacion del correo                         |
+| /privacidad                   | No      | Politica de privacidad y tratamiento de datos   |
+| /mi-cuenta                    | Si      | Datos, contrasena y eliminacion de la cuenta    |
 | /dashboard                    | Si      | Panel, distinto segun el rol                    |
 | /veterinarios                 | Si      | Listado con filtros por especialidad y modalidad |
 | /veterinarios/:id             | Si      | Perfil detallado y servicios (AN-26)            |
@@ -463,11 +504,25 @@ Los creditos y licencias de las fotografias utilizadas estan en
 
 ## Pruebas
 
-Las pruebas de la API se realizan con Postman. La documentacion de casos de prueba y evidencias
-se guardara en la carpeta `docs/`.
+| Tipo | Donde | Como se ejecutan |
+| ---- | ----- | ---------------- |
+| Unitarias del backend (zona horaria) | `backend/tests/schedule.test.js` | `node --test tests/schedule.test.js` |
+| API (criterios de aceptacion) | `backend/tests/sprint2.test.js` | `npm test` en `backend/`, con la API corriendo |
+| Unitarias y de componentes del frontend | `frontend/src/**/*.test.{js,jsx}` | `npm run test:unit` en `frontend/` |
+| Extremo a extremo (navegador) | `frontend/e2e/` | `npm run test:e2e` en `frontend/`, con API y frontend corriendo |
+
+Las pruebas de la API leen los correos enviados desde `MAIL_OUTBOX_FILE` (si se define al arrancar la
+API) para seguir los enlaces de verificacion y de recuperacion. Las pruebas e2e crean usuarios `e2e.*`
+y los borran al terminar (`backend/scripts/clean-test-data.js`). Para usar el Chrome instalado en vez
+del Chromium de Playwright: `PLAYWRIGHT_CHANNEL=chrome npm run test:e2e`.
+
+**Integracion continua:** `.github/workflows/ci.yml` ejecuta las cuatro suites en cada push y pull
+request, con una base MySQL temporal. Un pull request con pruebas fallidas queda marcado en rojo.
+
+Las evidencias manuales (Postman, capturas) se guardan en la carpeta `docs/`.
 
 Ademas, `backend/tests/sprint2.test.js` recorre automaticamente los criterios de aceptacion del
-Sprint 2, de las historias relacionadas y de las mejoras contra la API (98 casos). Con el backend corriendo, desde `backend/`:
+Sprint 2, del Sprint 3, de las mejoras y de la cuenta contra la API (123 casos). Con el backend corriendo, desde `backend/`:
 
 ```
 npm test

@@ -76,6 +76,9 @@ function Cabecera() {
             Usuarios
           </NavLink>
         )}
+        <NavLink to="/mi-cuenta" className="cabecera-enlace">
+          Mi cuenta
+        </NavLink>
         {!esAdministrador && (
           <NavLink
             to="/notificaciones"
@@ -97,6 +100,12 @@ function Cabecera() {
       </button>
     </header>
 
+    {usuario && usuario.emailVerified === false && !esAdministrador && (
+      <div className="aviso-verificacion" role="status">
+        <strong>Confirma tu correo.</strong> Te enviamos un enlace a {usuario.email}.{" "}
+        <Link to="/mi-cuenta">Reenviar enlace</Link>
+      </div>
+    )}
     {pendiente && (
       <div className="aviso-verificacion" role="status">
         <strong>Cuenta pendiente de verificación.</strong> Un administrador está revisando tu
