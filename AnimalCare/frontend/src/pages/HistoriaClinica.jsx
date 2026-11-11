@@ -7,6 +7,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import Cabecera from "../components/Cabecera";
 import Alerta from "../components/Alerta";
+import Adjuntos from "../components/Adjuntos";
 import { obtenerUsuario } from "../services/auth.service";
 import { obtenerHistoria, crearEntrada, modificarEntrada, eliminarEntrada } from "../services/medicalRecord.service";
 import { ICONO_ESPECIE, calcularEdad } from "../services/pet.service";
@@ -142,7 +143,7 @@ function FormularioEntrada({ inicial, citasPendientes = [], textoBoton, onGuarda
   );
 }
 
-function Entrada({ entrada, esVeterinario, onEditar, onEliminar }) {
+function Entrada({ entrada, esVeterinario, onEditar, onEliminar, onCambio }) {
   const [eliminando, setEliminando] = useState(false);
   const [motivo, setMotivo] = useState("");
   const [error, setError] = useState("");
@@ -219,6 +220,7 @@ function Entrada({ entrada, esVeterinario, onEditar, onEliminar }) {
         )}
       </dl>
 
+      <Adjuntos entrada={entrada} esVeterinario={esVeterinario} onCambio={onCambio} />
       {esVeterinario && entrada.canEdit && !eliminando && (
         <div className="acciones-linea no-imprimir">
           <button type="button" className="boton boton-secundario boton-auto" onClick={() => onEditar(entrada)}>
@@ -431,6 +433,7 @@ function HistoriaClinica() {
                         window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
                       onEliminar={eliminar}
+                      onCambio={cargar}
                     />
                   ))}
                 </ul>

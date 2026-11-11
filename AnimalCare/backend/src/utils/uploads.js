@@ -10,6 +10,7 @@ const crypto = require("node:crypto");
 const UPLOADS_DIR = path.resolve(__dirname, "../../uploads");
 const PHOTOS_DIR = path.join(UPLOADS_DIR, "photos"); // se sirve en /uploads/photos
 const DOCS_DIR = path.join(UPLOADS_DIR, "docs"); // NO se sirve publicamente
+const RECORDS_DIR = path.join(UPLOADS_DIR, "records"); // adjuntos de historias clinicas: NO publico
 
 const TIPOS = {
   "image/jpeg": "jpg",
@@ -94,6 +95,37 @@ async function deleteDoc(nombre) {
   }
 }
 
+// Adjuntos de la historia clinica: se guardan con nombre aleatorio y solo se
+// entregan por la API, verificando sesion y permiso.
+async function saveRecordFile(archivo) {
+  return guardar(RECORDS_DIR, "adjunto", archivo);
+}
+
+function recordFileAbsolutePath(nombre) {
+  return path.join(RECORDS_DIR, path.basename(nombre));
+}
+
+async function deleteRecordFile(nombre) {
+  if (nombre) {
+    await borrar(recordFileAbsolutePath(nombre));
+  }
+}
+
+// Nombre de archivo seguro para mostrar y para la cabecera de descarga:
+// sin rutas, sin caracteres de control y de largo acotado.
+function cleanFileName(value, extension) {
+  let nombre = String(value ?? "").split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f"<>|:*?]/g, "").trim();
+  if (nombre === "" || nombre === "." || nombre === "..") {
+    nombre = `adjunto.${extension}`;
+  }
+  if (nombre.length > 100) {
+    const punto = nombre.lastIndexOf(".");
+    const ext = punto > 0 ? nombre.slice(punto) : "";
+    nombre = nombre.slice(0, 100 - ext.length) + ext;
+  }
+  return nombre;
+}
+
 module.exports = {
   UPLOADS_DIR,
   PHOTOS_DIR,
@@ -103,4 +135,8 @@ module.exports = {
   saveDoc,
   docAbsolutePath,
   deleteDoc,
+  saveRecordFile,
+  recordFileAbsolutePath,
+  deleteRecordFile,
+  cleanFileName,
 };

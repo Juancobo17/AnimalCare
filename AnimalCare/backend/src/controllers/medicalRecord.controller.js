@@ -15,10 +15,16 @@ const prisma = require("../prisma");
 const notificationService = require("../services/notification.service");
 const { parseId } = require("../utils/params");
 const { parseDate, toDateString, describeDateTime, startOfDay } = require("../utils/schedule");
+const uploads = require("../utils/uploads");
 
 const MAX_REASON = 200;
 const MAX_TEXT = 2000;
 const MAX_ANNUL_REASON = 200;
+
+// Adjuntos: examenes, radiografias, informes.
+const ATTACHMENT_TYPES = ["application/pdf", "image/jpeg", "image/png"];
+const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const MAX_ATTACHMENTS_PER_RECORD = 10;
 
 function serverError(res, where, error) {
   console.error(`Error en ${where}:`, error);
@@ -31,6 +37,7 @@ function badRequest(res, errors) {
 
 const RECORD_INCLUDE = {
   vetProfile: { include: { user: { select: { name: true } } } },
+  attachments: { orderBy: { createdAt: "asc" } },
 };
 
 function toPublicRecord(record, { paraVeterinario, vetProfileId }) {
@@ -45,6 +52,13 @@ function toPublicRecord(record, { paraVeterinario, vetProfileId }) {
     vaccines: record.vaccines,
     observations: record.observations,
     appointmentId: record.appointmentId,
+    // Sin la ruta en disco: el archivo se pide por la API con su id.
+    attachments: (record.attachments || []).map((a) => ({
+      id: a.id,
+      name: a.fileName,
+      type: a.mimeType,
+      size: a.sizeBytes,
+    })),
     vet: { id: record.vetProfileId, name: record.vetProfile.user.name, specialty: record.vetProfile.specialty },
     createdAt: record.createdAt,
     // Se marca como editada si se cambio despues de crearla (mas de un minuto).
@@ -375,4 +389,129 @@ async function annulRecord(req, res) {
   }
 }
 
-module.exports = { getPetHistory, createRecord, updateRecord, annulRecord };
+// POST /api/medical-records/:id/attachments   body: { file: dataURL, name? }
+// El veterinario que escribio una entrada vigente le adjunta un PDF, JPG o PNG.
+async function addAttachment(req, res) {
+  try {
+    const actual = await cargarEntradaPropia(req, res);
+    if (!actual) return undefined;
+
+    const archivo = uploads.parseDataUrl(req.body?.file, { tipos: ATTACHMENT_TYPES, maxBytes: MAX_ATTACHMENT_BYTES });
+    if (archivo.error) return badRequest(res, [archivo.error]);
+
+    const total = await prisma.medicalAttachment.count({ where: { recordId: actual.id } });
+    if (total >= MAX_ATTACHMENTS_PER_RECORD) {
+      return res.status(409).json({
+        message: `Una entrada admite hasta ${MAX_ATTACHMENTS_PER_RECORD} archivos. Elimina alguno para agregar otro.`,
+      });
+    }
+
+    const storedName = await uploads.saveRecordFile(archivo);
+    let adjunto;
+    try {
+      adjunto = await prisma.medicalAttachment.create({
+        data: {
+          recordId: actual.id,
+          storedName,
+          fileName: uploads.cleanFileName(req.body?.name, archivo.extension),
+          mimeType: archivo.mime,
+          sizeBytes: archivo.buffer.length,
+        },
+      });
+    } catch (error) {
+      // Si no se pudo registrar, no se deja un archivo huerfano en disco.
+      await uploads.deleteRecordFile(storedName);
+      throw error;
+    }
+
+    return res.status(201).json({
+      message: "Archivo adjuntado a la entrada.",
+      attachment: { id: adjunto.id, name: adjunto.fileName, type: adjunto.mimeType, size: adjunto.sizeBytes },
+    });
+  } catch (error) {
+    return serverError(res, "addAttachment", error);
+  }
+}
+
+// Carga un adjunto y comprueba que quien pide pueda verlo. Responde 404 si no.
+//  - Dueño: solo de sus mascotas y de entradas vigentes.
+//  - Veterinario: de mascotas con las que tiene (o tuvo) relacion.
+async function cargarAdjuntoConAcceso(req, res) {
+  const id = parseId(req.params.attachmentId);
+  if (!id) {
+    res.status(400).json({ message: "El identificador del archivo no es valido." });
+    return null;
+  }
+  const adjunto = await prisma.medicalAttachment.findUnique({
+    where: { id },
+    include: { record: { include: { pet: { select: { userId: true } } } } },
+  });
+
+  let permitido = false;
+  if (adjunto && req.user.role === "CLIENT") {
+    permitido = adjunto.record.pet.userId === req.user.id && adjunto.record.status === "ACTIVE";
+  } else if (adjunto && req.user.role === "VETERINARIAN" && req.user.vetProfile) {
+    permitido = await vetTieneRelacion(req.user.vetProfile.id, adjunto.record.petId);
+  }
+  if (!permitido) {
+    res.status(404).json({ message: "El archivo no existe o no tienes acceso." });
+    return null;
+  }
+  return adjunto;
+}
+
+// GET /api/medical-records/attachments/:attachmentId
+async function downloadAttachment(req, res) {
+  try {
+    const adjunto = await cargarAdjuntoConAcceso(req, res);
+    if (!adjunto) return undefined;
+
+    res.setHeader("Content-Type", adjunto.mimeType);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    // Informacion medica: que ningun intermediario la guarde en cache.
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="adjunto"; filename*=UTF-8''${encodeURIComponent(adjunto.fileName)}`
+    );
+    return res.sendFile(uploads.recordFileAbsolutePath(adjunto.storedName), (error) => {
+      if (error && !res.headersSent) {
+        res.status(404).json({ message: "El archivo ya no está disponible." });
+      }
+    });
+  } catch (error) {
+    return serverError(res, "downloadAttachment", error);
+  }
+}
+
+// DELETE /api/medical-records/attachments/:attachmentId
+// Solo el veterinario que escribio la entrada, mientras esta vigente.
+async function removeAttachment(req, res) {
+  try {
+    const adjunto = await cargarAdjuntoConAcceso(req, res);
+    if (!adjunto) return undefined;
+
+    if (adjunto.record.vetProfileId !== req.user.vetProfile.id) {
+      return res.status(403).json({ message: "Solo el veterinario que escribió la entrada puede quitar sus archivos." });
+    }
+    if (adjunto.record.status !== "ACTIVE") {
+      return res.status(409).json({ message: "La entrada está anulada y no se puede cambiar." });
+    }
+
+    await prisma.medicalAttachment.delete({ where: { id: adjunto.id } });
+    await uploads.deleteRecordFile(adjunto.storedName);
+    return res.status(200).json({ message: "Archivo eliminado." });
+  } catch (error) {
+    return serverError(res, "removeAttachment", error);
+  }
+}
+
+module.exports = {
+  getPetHistory,
+  createRecord,
+  updateRecord,
+  annulRecord,
+  addAttachment,
+  downloadAttachment,
+  removeAttachment,
+};
