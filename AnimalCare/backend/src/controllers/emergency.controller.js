@@ -1,11 +1,15 @@
 // Urgencias (lo que AN-23 llamaba "emergencias").
 //
 // Flujo:
-//   1. El veterinario se pone "de turno" por 4, 8 o 12 horas.
+//   1. No hay turnos aparte: un veterinario recibe urgencias cuando esta dentro de
+//      su horario de "Mi horario" y sin un bloqueo de agenda en ese momento.
 //   2. El dueño describe la urgencia (sintomas, mascota, telefono y si es en la
 //      veterinaria o a domicilio).
 //   3. Se avisa a los veterinarios de turno compatibles con la modalidad. El
-//      primero que la acepta se queda con ella (la toma es atomica).
+//      primero que la acepta se queda con ella (la toma es atomica) y se le crea
+//      una cita confirmada de URGENCY_MINUTES que ocupa su agenda. Si tenia citas
+//      en ese rato, la urgencia tiene prioridad: con su confirmacion esas citas se
+//      cancelan y se pide a cada cliente que reagende.
 //   4. El dueño ve quien lo atiende y como contactarlo. La urgencia termina
 //      cuando el veterinario la marca como atendida, el dueño la cancela, el
 //      veterinario la libera (vuelve a abrirse) o vence sin respuesta.
@@ -16,10 +20,12 @@ const prisma = require("../prisma");
 const notificationService = require("../services/notification.service");
 const { findOwnActivePet } = require("./pet.controller");
 const { parseId } = require("../utils/params");
+const { localWeekday, toTimeOfDay, parseTime, describeDateTime, MAX_DURATION_MINUTES } = require("../utils/schedule");
 
 const TTL_MIN = Number(process.env.EMERGENCY_TTL_MIN) || 30;
 const TTL_MS = TTL_MIN * 60 * 1000;
-const DUTY_HOURS = [4, 8, 12];
+// Lo que dura la cita que se crea al aceptar una urgencia.
+const URGENCY_MINUTES = 30;
 const MIN_SYMPTOMS = 10;
 const MAX_SYMPTOMS = 500;
 const MODES = ["CLINIC", "HOME"];
@@ -42,12 +48,55 @@ async function expireOld() {
   });
 }
 
-// Veterinarios activos y de turno ahora, compatibles con la modalidad.
-function onDutyWhere(mode) {
-  const where = { emergencyUntil: { gt: new Date() }, user: { status: "ACTIVE" } };
+// Veterinarios que pueden recibir una urgencia ahora mismo: cuenta aprobada,
+// modalidad compatible, dentro de su horario semanal para los proximos
+// URGENCY_MINUTES, sin bloqueo de agenda y sin otra urgencia en curso.
+// Las citas normales no lo impiden: la urgencia tiene prioridad sobre ellas.
+async function vetsDisponibles(mode, { excluir } = {}) {
+  const where = { user: { status: "ACTIVE" }, emergencies: { none: { status: "ACCEPTED" } } };
   if (mode === "HOME") where.homeService = true;
   if (mode === "CLINIC") where.clinicService = true;
-  return where;
+  if (excluir) where.id = { not: excluir };
+  const perfiles = await prisma.vetProfile.findMany({ where, include: { availabilities: true } });
+  return filtrarPorHorario(perfiles);
+}
+
+async function filtrarPorHorario(perfiles) {
+  if (perfiles.length === 0) return [];
+  const ahora = new Date();
+  const fin = new Date(ahora.getTime() + URGENCY_MINUTES * 60000);
+  const minutosAhora = parseTime(toTimeOfDay(ahora));
+  const diaSemana = localWeekday(ahora);
+  const bloqueos = await prisma.scheduleBlock.findMany({
+    where: { vetProfileId: { in: perfiles.map((p) => p.id) }, startsAt: { lt: fin }, endsAt: { gt: ahora } },
+    select: { vetProfileId: true },
+  });
+  const bloqueados = new Set(bloqueos.map((b) => b.vetProfileId));
+
+  return perfiles.filter(
+    (p) =>
+      !bloqueados.has(p.id) &&
+      p.availabilities.some(
+        (a) =>
+          a.weekday === diaSemana &&
+          parseTime(a.startTime) <= minutosAhora &&
+          minutosAhora + URGENCY_MINUTES <= parseTime(a.endTime)
+      )
+  );
+}
+
+// Citas del veterinario que se cruzan con una urgencia que empieza ahora.
+async function citasEnConflicto(vetProfileId, desde) {
+  const fin = new Date(desde.getTime() + URGENCY_MINUTES * 60000);
+  const citas = await prisma.appointment.findMany({
+    where: {
+      vetProfileId,
+      status: { in: ["PENDING", "CONFIRMED"] },
+      scheduledAt: { gte: new Date(desde.getTime() - MAX_DURATION_MINUTES * 60000), lt: fin },
+    },
+    include: { client: { select: { id: true, name: true } } },
+  });
+  return citas.filter((c) => new Date(c.scheduledAt.getTime() + c.durationMinutes * 60000) > desde);
 }
 
 const INCLUDE = {
@@ -107,15 +156,16 @@ function resumen(texto) {
 // ======================= Dueño =======================
 
 // GET /api/emergencies/availability
-// Cuantos veterinarios estan de turno ahora, para avisar antes de pedir.
+// Cuantos veterinarios estan atendiendo ahora segun su horario, para avisar antes de pedir.
 async function availability(req, res) {
   try {
-    const [total, home, clinic] = await Promise.all([
-      prisma.vetProfile.count({ where: onDutyWhere() }),
-      prisma.vetProfile.count({ where: onDutyWhere("HOME") }),
-      prisma.vetProfile.count({ where: onDutyWhere("CLINIC") }),
-    ]);
-    return res.status(200).json({ onDuty: total, home, clinic, ttlMinutes: TTL_MIN });
+    const lista = await vetsDisponibles(null);
+    return res.status(200).json({
+      available: lista.length,
+      home: lista.filter((p) => p.homeService).length,
+      clinic: lista.filter((p) => p.clinicService).length,
+      ttlMinutes: TTL_MIN,
+    });
   } catch (error) {
     return serverError(res, "emergency availability", error);
   }
@@ -161,16 +211,13 @@ async function createEmergency(req, res) {
       });
     }
 
-    const veterinarios = await prisma.vetProfile.findMany({
-      where: onDutyWhere(modo),
-      select: { userId: true },
-    });
+    const veterinarios = await vetsDisponibles(modo);
     if (veterinarios.length === 0) {
       return res.status(409).json({
         message:
-          "No hay veterinarios de turno en este momento para esa modalidad. " +
+          "No hay veterinarios atendiendo en este momento para esa modalidad. " +
           "Si tu mascota está grave, acude de inmediato a la clínica veterinaria más cercana.",
-        code: "NO_VETS_ON_DUTY",
+        code: "NO_VETS_AVAILABLE",
       });
     }
 
@@ -193,7 +240,7 @@ async function createEmergency(req, res) {
     );
 
     return res.status(201).json({
-      message: `Avisamos a ${veterinarios.length} veterinario(s) de turno. Te mostraremos aquí quién la acepta.`,
+      message: `Avisamos a ${veterinarios.length} veterinario(s) disponibles. Te mostraremos aquí quién la acepta.`,
       emergency: toClientView(creada),
     });
   } catch (error) {
@@ -223,6 +270,7 @@ async function cancelEmergency(req, res) {
     });
     if (r.count === 0) return res.status(409).json({ message: "La urgencia cambió de estado. Actualiza la página." });
 
+    await cerrarCita(actual.appointmentId, "CANCELLED");
     if (actual.status === "ACCEPTED" && actual.vetProfile) {
       await notificationService.notify(
         actual.vetProfile.user.id,
@@ -237,57 +285,14 @@ async function cancelEmergency(req, res) {
 
 // ======================= Veterinario =======================
 
-// GET /api/emergencies/duty
-async function getDuty(req, res) {
-  try {
-    const perfil = await prisma.vetProfile.findUnique({ where: { id: req.user.vetProfile.id } });
-    const activo = Boolean(perfil.emergencyUntil && perfil.emergencyUntil > new Date());
-    return res.status(200).json({
-      active: activo,
-      until: activo ? perfil.emergencyUntil : null,
-      hoursOptions: DUTY_HOURS,
-      canGoOnDuty: req.user.status === "ACTIVE",
-    });
-  } catch (error) {
-    return serverError(res, "getDuty", error);
-  }
-}
-
-// PUT /api/emergencies/duty  { hours: 0 | 4 | 8 | 12 }   (0 = salir de turno)
-async function setDuty(req, res) {
-  try {
-    const horas = Number(req.body?.hours);
-    if (!Number.isInteger(horas) || (horas !== 0 && !DUTY_HOURS.includes(horas))) {
-      return badRequest(res, [`Elige un turno de ${DUTY_HOURS.join(", ")} horas, o 0 para salir de turno.`]);
-    }
-    if (horas > 0 && req.user.status !== "ACTIVE") {
-      return res.status(409).json({ message: "Tu cuenta debe estar aprobada para atender urgencias." });
-    }
-    const hasta = horas === 0 ? null : new Date(Date.now() + horas * 60 * 60 * 1000);
-    await prisma.vetProfile.update({ where: { id: req.user.vetProfile.id }, data: { emergencyUntil: hasta } });
-    return res.status(200).json({
-      message: horas === 0 ? "Saliste de turno. Ya no recibirás urgencias." : `Estás de turno por ${horas} horas.`,
-      active: horas > 0,
-      until: hasta,
-    });
-  } catch (error) {
-    return serverError(res, "setDuty", error);
-  }
-}
-
-// El veterinario debe estar de turno para ver y aceptar urgencias.
-async function perfilDeTurno(req) {
-  const perfil = await prisma.vetProfile.findUnique({ where: { id: req.user.vetProfile.id } });
-  const deTurno = Boolean(perfil.emergencyUntil && perfil.emergencyUntil > new Date());
-  return { perfil, deTurno };
-}
-
 // GET /api/emergencies/open
 async function listOpen(req, res) {
   try {
     await expireOld();
-    const { perfil, deTurno } = await perfilDeTurno(req);
-    if (!deTurno) return res.status(200).json({ onDuty: false, requests: [] });
+    const perfil = await prisma.vetProfile.findUnique({ where: { id: req.user.vetProfile.id } });
+    const canAttend = req.user.status === "ACTIVE";
+    const disponible = canAttend && (await disponibleAhora(perfil));
+    if (!disponible) return res.status(200).json({ available: false, canAttend, requests: [] });
 
     const modos = [];
     if (perfil.clinicService) modos.push("CLINIC");
@@ -297,7 +302,7 @@ async function listOpen(req, res) {
       include: INCLUDE,
       orderBy: { createdAt: "asc" },
     });
-    return res.status(200).json({ onDuty: true, requests: abiertas.map(toVetView) });
+    return res.status(200).json({ available: true, canAttend, requests: abiertas.map(toVetView) });
   } catch (error) {
     return serverError(res, "listOpen", error);
   }
@@ -346,9 +351,17 @@ async function acceptEmergency(req, res) {
     if (!id) return res.status(400).json({ message: "El identificador de la urgencia no es valido." });
     await expireOld();
 
-    const { perfil, deTurno } = await perfilDeTurno(req);
-    if (!deTurno) {
-      return res.status(409).json({ message: "Debes estar de turno para aceptar urgencias." });
+    const perfil = await prisma.vetProfile.findUnique({ where: { id: req.user.vetProfile.id } });
+    if (req.user.status !== "ACTIVE") {
+      return res.status(409).json({ message: "Tu cuenta debe estar aprobada para atender urgencias." });
+    }
+    if (!(await disponibleAhora(perfil))) {
+      return res.status(409).json({
+        message:
+          `La urgencia ocupa los próximos ${URGENCY_MINUTES} minutos y deben caer dentro de tu horario ` +
+          "de atención, sin un bloqueo de agenda.",
+        code: "NOT_AVAILABLE",
+      });
     }
 
     const urgencia = await prisma.emergencyRequest.findUnique({ where: { id } });
@@ -364,6 +377,24 @@ async function acceptEmergency(req, res) {
       return res.status(409).json({ message: "Ya tienes una urgencia en curso. Márcala como atendida antes de aceptar otra." });
     }
 
+    // Las citas de ese rato se cruzan con la urgencia: se pide confirmacion.
+    const inicio = new Date();
+    const conflictos = await citasEnConflicto(perfil.id, inicio);
+    if (conflictos.length > 0 && req.body?.rescheduleConflicts !== true) {
+      return res.status(409).json({
+        message:
+          "Tienes citas en ese horario. Si aceptas, se cancelan y se pide a esos clientes que reagenden, " +
+          "porque la urgencia tiene prioridad.",
+        code: "APPOINTMENT_CONFLICT",
+        conflicts: conflictos.map((c) => ({
+          id: c.id,
+          client: c.client.name,
+          scheduledAt: c.scheduledAt,
+          durationMinutes: c.durationMinutes,
+        })),
+      });
+    }
+
     const toma = await prisma.emergencyRequest.updateMany({
       where: { id, status: "OPEN", createdAt: { gte: new Date(Date.now() - TTL_MS) } },
       data: { status: "ACCEPTED", vetProfileId: perfil.id, acceptedAt: new Date() },
@@ -372,6 +403,38 @@ async function acceptEmergency(req, res) {
       return res.status(409).json({ message: "Otro veterinario ya tomó esta urgencia, o venció." });
     }
 
+    // Las citas desplazadas se cancelan y se avisa a cada cliente para que reagende.
+    if (conflictos.length > 0) {
+      await prisma.appointment.updateMany({
+        where: { id: { in: conflictos.map((c) => c.id) }, status: { in: ["PENDING", "CONFIRMED"] } },
+        data: { status: "CANCELLED" },
+      });
+      for (const c of conflictos) {
+        await notificationService.notify(
+          c.clientId,
+          `${req.user.name} tuvo que cancelar tu cita del ${describeDateTime(c.scheduledAt)} porque atiende una ` +
+            "urgencia, que tiene prioridad. Te pedimos que reagendes: tu horario quedó libre en su agenda."
+        );
+      }
+    }
+
+    // La urgencia ocupa la agenda del veterinario como una cita confirmada.
+    const cita = await prisma.appointment.create({
+      data: {
+        mode: urgencia.mode,
+        scheduledAt: inicio,
+        durationMinutes: URGENCY_MINUTES,
+        address: urgencia.mode === "HOME" ? urgencia.address : null,
+        notes: `URGENCIA: ${urgencia.symptoms}`,
+        status: "CONFIRMED",
+        clientId: urgencia.clientId,
+        vetProfileId: perfil.id,
+        petId: urgencia.petId,
+        reminderSentAt: inicio, // no hace falta recordarla: es para ahora
+      },
+    });
+    await prisma.emergencyRequest.update({ where: { id }, data: { appointmentId: cita.id } });
+
     const aceptada = await prisma.emergencyRequest.findUnique({ where: { id }, include: INCLUDE });
     await notificationService.notify(
       aceptada.clientId,
@@ -379,10 +442,30 @@ async function acceptEmergency(req, res) {
         (perfil.phone ? `Llámalo al ${perfil.phone}. ` : "") +
         (aceptada.mode === "CLINIC" ? `Te espera en ${perfil.address || "su veterinaria"}.` : "Va en camino a la dirección que indicaste.")
     );
-    return res.status(200).json({ message: "Urgencia aceptada. Contacta al dueño.", emergency: toVetView(aceptada) });
+    return res.status(200).json({
+      message:
+        `Urgencia aceptada. Quedó en tu agenda por ${URGENCY_MINUTES} minutos.` +
+        (conflictos.length > 0 ? ` Se pidió reagendar a ${conflictos.length} cliente(s).` : "") +
+        " Contacta al dueño.",
+      emergency: toVetView(aceptada),
+    });
   } catch (error) {
     return serverError(res, "acceptEmergency", error);
   }
+}
+
+async function disponibleAhora(perfil) {
+  const lista = await vetsDisponibles(null);
+  return lista.some((p) => p.id === perfil.id);
+}
+
+// La cita de una urgencia sigue el estado de la urgencia.
+async function cerrarCita(appointmentId, status) {
+  if (!appointmentId) return;
+  await prisma.appointment.updateMany({
+    where: { id: appointmentId, status: { in: ["PENDING", "CONFIRMED"] } },
+    data: { status },
+  });
 }
 
 // Carga una urgencia aceptada por este veterinario.
@@ -420,6 +503,7 @@ async function completeEmergency(req, res) {
     });
     if (r.count === 0) return res.status(409).json({ message: "La urgencia cambió de estado. Actualiza la página." });
 
+    await cerrarCita(urgencia.appointmentId, "COMPLETED");
     await notificationService.notify(
       urgencia.clientId,
       `${req.user.name} marcó tu urgencia como atendida. Si necesitas seguimiento, agenda una cita.`
@@ -439,18 +523,17 @@ async function releaseEmergency(req, res) {
 
     const r = await prisma.emergencyRequest.updateMany({
       where: { id: urgencia.id, vetProfileId: req.user.vetProfile.id, status: "ACCEPTED" },
-      data: { status: "OPEN", vetProfileId: null, acceptedAt: null },
+      data: { status: "OPEN", vetProfileId: null, acceptedAt: null, appointmentId: null },
     });
     if (r.count === 0) return res.status(409).json({ message: "La urgencia cambió de estado. Actualiza la página." });
+
+    await cerrarCita(urgencia.appointmentId, "CANCELLED"); // la agenda queda libre
 
     await notificationService.notify(
       urgencia.clientId,
       `${req.user.name} no puede atender tu urgencia. La abrimos de nuevo para los demás veterinarios de turno.`
     );
-    const otros = await prisma.vetProfile.findMany({
-      where: { ...onDutyWhere(urgencia.mode), id: { not: req.user.vetProfile.id } },
-      select: { userId: true },
-    });
+    const otros = await vetsDisponibles(urgencia.mode, { excluir: req.user.vetProfile.id });
     await notificationService.notifyMany(
       otros.map((v) => v.userId),
       `URGENCIA ${urgencia.mode === "HOME" ? "a domicilio" : "en la veterinaria"} de nuevo disponible: ${resumen(urgencia.symptoms)}.`
@@ -465,12 +548,11 @@ module.exports = {
   availability,
   createEmergency,
   cancelEmergency,
-  getDuty,
-  setDuty,
   listOpen,
   listMine,
   acceptEmergency,
   completeEmergency,
   releaseEmergency,
   TTL_MIN,
+  URGENCY_MINUTES,
 };

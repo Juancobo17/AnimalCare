@@ -130,19 +130,17 @@ model Pet {
 // Datos profesionales del veterinario (AN-7 y AN-26).
 // Se crea en la misma transaccion que el usuario al registrarse.
 model VetProfile {
-  id             Int       @id @default(autoincrement())
-  license        String    @unique // numero de matricula profesional
+  id             Int      @id @default(autoincrement())
+  license        String   @unique // numero de matricula profesional
   specialty      String
-  bio            String?   @db.Text
+  bio            String?  @db.Text
   // Foto de perfil (enlace a la imagen). Si no hay, el frontend muestra las iniciales.
   photoUrl       String?
   // Calificacion promedio de 0.0 a 5.0. null mientras no existan calificaciones.
-  rating         Decimal?  @db.Decimal(2, 1)
+  rating         Decimal? @db.Decimal(2, 1)
   phone          String?
   // Direccion del consultorio. Obligatoria si atiende en veterinaria.
   address        String?
-  // De turno para urgencias hasta este momento (null o pasado = fuera de turno).
-  emergencyUntil DateTime?
   // Archivo de la tarjeta profesional que revisa el administrador (privado).
   licenseDocPath String?
 
@@ -236,6 +234,9 @@ model Appointment {
 
   // Entrada de historia clinica registrada para esta cita (una como maximo).
   medicalRecord MedicalRecord?
+
+  // Si la cita nacio de una urgencia aceptada por el veterinario.
+  emergency EmergencyRequest?
 
   @@index([clientId])
   @@index([vetProfileId, scheduledAt])
@@ -401,6 +402,10 @@ model EmergencyRequest {
   // Veterinario que la acepto (null mientras esta abierta).
   vetProfileId Int?
   vetProfile   VetProfile? @relation(fields: [vetProfileId], references: [id])
+
+  // Al aceptarla se crea una cita que ocupa la agenda del veterinario.
+  appointmentId Int?         @unique
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
 
   @@index([status, createdAt])
   @@index([clientId])

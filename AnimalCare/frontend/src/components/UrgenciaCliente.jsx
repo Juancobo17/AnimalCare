@@ -45,7 +45,7 @@ function UrgenciaCliente() {
     }
   }
 
-  // Estado de la urgencia y de los veterinarios de turno, cada 10 segundos.
+  // Estado de la urgencia y de los veterinarios disponibles, cada 10 segundos.
   useSondeo(cargar, INTERVALO_SONDEO_MS);
   // Las mascotas se piden una sola vez.
   useSondeo(
@@ -118,7 +118,7 @@ function UrgenciaCliente() {
   }
 
   const activa = estado.active;
-  const sinVeterinarios = disponibilidad && disponibilidad.onDuty === 0;
+  const sinVeterinarios = disponibilidad && disponibilidad.available === 0;
   const historial = estado.emergencies.filter((e) => !activa || e.id !== activa.id);
 
   return (
@@ -126,11 +126,11 @@ function UrgenciaCliente() {
       <div className="tarjeta">
         <h1>Urgencias</h1>
         <p className="texto-suave">
-          Avisamos a los veterinarios que están de turno y te mostramos aquí quién acepta atender a tu mascota.
+          Avisamos a los veterinarios que están atendiendo ahora y te mostramos aquí quién acepta atender a tu mascota.
         </p>
         <div className="alerta-urgencia" role="note">
           <strong>Si tu mascota está inconsciente, convulsiona, no respira o sangra mucho, no esperes:</strong> llévala de
-          inmediato a la clínica veterinaria más cercana. AnimalCare conecta con veterinarios de turno, pero no puede
+          inmediato a la clínica veterinaria más cercana. AnimalCare conecta con veterinarios disponibles, pero no puede
           garantizar una respuesta.
         </div>
       </div>
@@ -144,7 +144,7 @@ function UrgenciaCliente() {
         <div className="tarjeta urgencia-estado urgencia-buscando" role="status">
           <span className="pulso" aria-hidden="true" />
           <div>
-            <h3>Buscando un veterinario de turno…</h3>
+            <h3>Buscando un veterinario disponible…</h3>
             <p>
               Pedida {haceCuanto(activa.createdAt)}. Si nadie la acepta antes de las{" "}
               <strong>{horaLocal(activa.expiresAt)}</strong>, la solicitud se cierra y podrás intentarlo de nuevo.
@@ -207,8 +207,8 @@ function UrgenciaCliente() {
           {disponibilidad && (
             <p className={sinVeterinarios ? "urgencia-sin-turno" : "texto-suave"}>
               {sinVeterinarios
-                ? "Ahora mismo no hay veterinarios de turno. Si tu mascota está grave, acude a la clínica veterinaria más cercana."
-                : `Hay ${disponibilidad.onDuty} veterinario(s) de turno ahora (${disponibilidad.clinic} en veterinaria, ${disponibilidad.home} a domicilio).`}
+                ? "Ahora mismo no hay veterinarios atendiendo. Si tu mascota está grave, acude a la clínica veterinaria más cercana."
+                : `Hay ${disponibilidad.available} veterinario(s) atendiendo ahora (${disponibilidad.clinic} en veterinaria, ${disponibilidad.home} a domicilio).`}
             </p>
           )}
 

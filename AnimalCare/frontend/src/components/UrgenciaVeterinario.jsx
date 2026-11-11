@@ -1,13 +1,11 @@
-// Urgencias, vista del veterinario: ponerse de turno, aceptar urgencias abiertas
-// y atender la que tiene en curso.
+// Urgencias, vista del veterinario: recibe las urgencias mientras esta dentro de su
+// horario (Mi horario), acepta una y la atiende. Aceptarla ocupa su agenda.
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import Alerta from "./Alerta";
 import { useSondeo } from "../hooks/useSondeo";
 import {
-  estadoDeTurno,
-  ponerseDeTurno,
   urgenciasAbiertas,
   misUrgencias,
   aceptarUrgencia,
@@ -22,7 +20,8 @@ import { MODALIDADES } from "../services/vet.service";
 import { obtenerMensajesDeError } from "../services/api";
 
 function UrgenciaVeterinario() {
-  const [turno, setTurno] = useState(null);
+  const [estado, setEstado] = useState(null); // { available, canAttend }
+  const [conflicto, setConflicto] = useState(null); // aceptar choca con citas: { id, message, conflicts }
   const [abiertas, setAbiertas] = useState([]);
   const [mias, setMias] = useState({ active: null, emergencies: [] });
   const [cargado, setCargado] = useState(false);
@@ -33,12 +32,8 @@ function UrgenciaVeterinario() {
 
   async function cargar() {
     try {
-      const t = await estadoDeTurno();
-      setTurno(t);
-      const [lista, propias] = await Promise.all([
-        t.active ? urgenciasAbiertas() : Promise.resolve({ requests: [] }),
-        misUrgencias(),
-      ]);
+      const [lista, propias] = await Promise.all([urgenciasAbiertas(), misUrgencias()]);
+      setEstado({ available: lista.available, canAttend: lista.canAttend });
       setAbiertas(lista.requests);
       setMias(propias);
     } catch {
@@ -66,6 +61,29 @@ function UrgenciaVeterinario() {
     }
   }
 
+  // Aceptar: si hay citas que se cruzan, se pide confirmar antes de cancelarlas.
+  async function aceptar(id, reagendar = false) {
+    setErrores([]);
+    setExito([]);
+    setOcupado(`aceptar-${id}`);
+    try {
+      const r = await aceptarUrgencia(id, reagendar);
+      setConflicto(null);
+      setExito([r.message]);
+    } catch (error) {
+      const datos = error.response?.data;
+      if (datos?.code === "APPOINTMENT_CONFLICT") {
+        setConflicto({ id, message: datos.message, conflicts: datos.conflicts });
+      } else {
+        setConflicto(null);
+        setErrores(obtenerMensajesDeError(error));
+      }
+    } finally {
+      setOcupado(null);
+      await cargar();
+    }
+  }
+
   const activa = mias.active;
   const historial = mias.emergencies.filter((u) => !activa || u.id !== activa.id);
 
@@ -74,8 +92,8 @@ function UrgenciaVeterinario() {
       <div className="tarjeta">
         <h1>Urgencias</h1>
         <p className="texto-suave">
-          Ponte de turno para recibir los avisos de dueños que necesitan atención urgente. El primero que acepta se
-          queda con el caso.
+          Recibes los avisos de dueños con una urgencia cuando estás dentro de tu horario de atención. El primero que
+          acepta se queda con el caso y la urgencia ocupa tu agenda por 30 minutos.
         </p>
       </div>
 
@@ -84,42 +102,18 @@ function UrgenciaVeterinario() {
 
       {!cargado && <p className="texto-suave">Cargando...</p>}
 
-      {turno && (
+      {estado && (
         <div className="tarjeta">
-          <h3>Mi turno</h3>
-          {!turno.canGoOnDuty && !turno.active ? (
-            <p className="texto-suave">
-              Tu cuenta debe estar aprobada por el administrador para atender urgencias.
-            </p>
-          ) : turno.active ? (
-            <div className="acciones-linea">
-              <span className="etiqueta etiqueta-confirmed">De turno hasta las {horaLocal(turno.until)}</span>
-              <button
-                type="button"
-                className="boton boton-secundario boton-auto"
-                disabled={ocupado === "turno"}
-                onClick={() => ejecutar("turno", () => ponerseDeTurno(0))}
-              >
-                Salir de turno
-              </button>
-            </div>
+          <h3>Mi disponibilidad</h3>
+          {!estado.canAttend ? (
+            <p className="texto-suave">Tu cuenta debe estar aprobada por el administrador para atender urgencias.</p>
+          ) : estado.available ? (
+            <span className="etiqueta etiqueta-confirmed">Disponible: estás dentro de tu horario</span>
           ) : (
-            <>
-              <p className="texto-suave">Estás fuera de turno. Elige por cuánto tiempo quieres recibir urgencias:</p>
-              <div className="acciones-linea">
-                {turno.hoursOptions.map((h) => (
-                  <button
-                    key={h}
-                    type="button"
-                    className="boton boton-primario boton-auto"
-                    disabled={ocupado === "turno"}
-                    onClick={() => ejecutar("turno", () => ponerseDeTurno(h))}
-                  >
-                    De turno {h} horas
-                  </button>
-                ))}
-              </div>
-            </>
+            <p className="texto-suave">
+              Ahora no recibes urgencias: estás fuera de tu horario de atención, tienes un bloqueo en la agenda o ya
+              atiendes una urgencia. Revisa <Link to="/mi-horario">Mi horario</Link>.
+            </p>
           )}
         </div>
       )}
@@ -185,7 +179,34 @@ function UrgenciaVeterinario() {
         </div>
       )}
 
-      {turno?.active && (
+      {conflicto && (
+        <div className="tarjeta" role="alertdialog" aria-label="Citas que se cruzan">
+          <h3>Tienes citas en ese horario</h3>
+          <p>{conflicto.message}</p>
+          <ul>
+            {conflicto.conflicts.map((c) => (
+              <li key={c.id}>
+                {c.client} · {horaLocal(c.scheduledAt)} ({c.durationMinutes} min)
+              </li>
+            ))}
+          </ul>
+          <div className="acciones-linea">
+            <button
+              type="button"
+              className="boton boton-peligro-solido boton-auto"
+              disabled={ocupado === `aceptar-${conflicto.id}`}
+              onClick={() => aceptar(conflicto.id, true)}
+            >
+              Aceptar y pedir que reagenden
+            </button>
+            <button type="button" className="boton boton-secundario boton-auto" onClick={() => setConflicto(null)}>
+              No aceptar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {estado?.available && (
         <div className="tarjeta">
           <h3>Urgencias abiertas ({abiertas.length})</h3>
           {abiertas.length === 0 ? (
@@ -216,7 +237,7 @@ function UrgenciaVeterinario() {
                     className="boton boton-peligro-solido boton-auto"
                     disabled={ocupado === `aceptar-${u.id}` || Boolean(activa)}
                     title={activa ? "Termina la urgencia en curso para aceptar otra" : undefined}
-                    onClick={() => ejecutar(`aceptar-${u.id}`, () => aceptarUrgencia(u.id))}
+                    onClick={() => aceptar(u.id)}
                   >
                     Aceptar
                   </button>

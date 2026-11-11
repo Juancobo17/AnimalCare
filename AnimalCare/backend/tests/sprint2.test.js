@@ -22,7 +22,7 @@ const bcrypt = require("bcrypt");
 const prisma = require("../src/prisma");
 const uploads = require("../src/utils/uploads");
 const { runReminders } = require("../src/services/reminder.service");
-const { toDateString } = require("../src/utils/schedule");
+const { toDateString, localWeekday, toTimeOfDay, parseTime } = require("../src/utils/schedule");
 
 const API = process.env.API_URL || `http://localhost:${process.env.PORT || 4000}/api`;
 const RUN = `${Date.now()}`.slice(-7);
@@ -1641,21 +1641,25 @@ describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
   const SINTOMAS = "Mi gato vomita sin parar y no quiere moverse";
   const pedir = (token, extra = {}) =>
     http("POST", "/emergencies", { token, body: { symptoms: SINTOMAS, mode: "CLINIC", phone: "3001234567", ...extra } });
-  const turno = (token, hours) => http("PUT", "/emergencies/duty", { token, body: { hours } });
-  const accion = (token, id, nombre) => http("PATCH", `/emergencies/${id}/${nombre}`, { token });
+  const accion = (token, id, nombre, body) => http("PATCH", `/emergencies/${id}/${nombre}`, { token, body });
   const mia = (token) => http("GET", "/emergencies/mine", { token });
   const abiertas = (token) => http("GET", "/emergencies/open", { token });
+  const citaDe = (emergenciaId) =>
+    prisma.emergencyRequest
+      .findUnique({ where: { id: emergenciaId }, include: { appointment: true } })
+      .then((e) => e?.appointment ?? null);
+  const perfilDe = (email) => prisma.vetProfile.findFirst({ where: { user: { email } } });
 
-  test("sin veterinarios de turno se avisa y no se crea la urgencia", async (t) => {
+  test("sin veterinarios en su horario se avisa y no se crea la urgencia", async (t) => {
     const disp = await http("GET", "/emergencies/availability", { token: ctx.clienteA });
     assert.equal(disp.status, 200);
-    if (disp.data.onDuty !== 0) {
-      t.skip("hay veterinarios reales de turno en esta base");
+    if (disp.data.available !== 0) {
+      t.skip("hay veterinarios reales atendiendo ahora en esta base");
       return;
     }
     const r = await pedir(ctx.clienteA, { petId: ctx.mascota });
     assert.equal(r.status, 409);
-    assert.equal(r.data.code, "NO_VETS_ON_DUTY");
+    assert.equal(r.data.code, "NO_VETS_AVAILABLE");
     assert.match(r.data.message, /clínica veterinaria más cercana/);
   });
 
@@ -1667,28 +1671,37 @@ describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
     assert.equal((await pedir(ctx.clienteB, { petId: ctx.mascota })).status, 404);
   });
 
-  test("solo un veterinario aprobado se pone de turno, con horas validas", async () => {
+  test("ya no existe el turno aparte; un veterinario sin aprobar no atiende urgencias", async () => {
+    assert.equal((await http("PUT", "/emergencies/duty", { token: ctx.vet, body: { hours: 4 } })).status, 404);
+
     const reg = await registroVeterinario(`${PREFIJO}.vet3@test.com`, `QC${RUN}`, `Vet Pendiente ${RUN}`);
     assert.equal(reg.status, 201, errores(reg));
     const pendiente = await tokenDe(`${PREFIJO}.vet3@test.com`);
-    assert.equal((await turno(pendiente, 4)).status, 409, "pendiente de aprobacion");
-
-    assert.equal((await turno(ctx.vet, 5)).status, 400);
-    assert.equal((await turno(ctx.vet, "x")).status, 400);
-    assert.equal((await turno(ctx.clienteA, 4)).status, 403, "un cliente no atiende urgencias");
-
-    const ok = await turno(ctx.vet, 8);
-    assert.equal(ok.status, 200, errores(ok));
-    const estado = await http("GET", "/emergencies/duty", { token: ctx.vet });
-    assert.deepEqual(
-      { active: estado.data.active, opciones: estado.data.hoursOptions },
-      { active: true, opciones: [4, 8, 12] }
-    );
+    const lista = await abiertas(pendiente);
+    assert.deepEqual({ canAttend: lista.data.canAttend, total: lista.data.requests.length }, { canAttend: false, total: 0 });
+    assert.equal((await accion(pendiente, 1, "accept")).status, 409);
   });
 
-  test("el dueño pide una urgencia, se avisa a los veterinarios de turno y solo puede tener una", async () => {
+  test("los veterinarios reciben urgencias segun su horario de atencion (Mi horario)", async (t) => {
+    const ahora = new Date();
+    const minutos = parseTime(toTimeOfDay(ahora));
+    if (minutos > 23 * 60 + 25) {
+      t.skip("muy cerca de la medianoche: la urgencia ocupa 30 minutos dentro del dia");
+      return;
+    }
+    // Horario de hoy para los dos veterinarios (se retira al terminar el grupo).
+    ctx.perfiles = { vet: await perfilDe(ctx.emails.vet), vet2: await perfilDe(ctx.emails.vet2) };
+    ctx.horarios = [];
+    for (const perfil of Object.values(ctx.perfiles)) {
+      const a = await prisma.availability.create({
+        data: { vetProfileId: perfil.id, weekday: localWeekday(ahora), startTime: "00:00", endTime: "23:59" },
+      });
+      ctx.horarios.push(a.id);
+    }
+    ctx.enHorario = true;
+
     const disp = await http("GET", "/emergencies/availability", { token: ctx.clienteA });
-    assert.ok(disp.data.onDuty >= 1);
+    assert.ok(disp.data.available >= 2);
 
     const r = await pedir(ctx.clienteA, { petId: ctx.mascota });
     assert.equal(r.status, 201, errores(r));
@@ -1706,18 +1719,34 @@ describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
     assert.equal(otra.data.code, "EMERGENCY_IN_PROGRESS");
   });
 
-  test("otro cliente no puede cancelar la urgencia ajena", async () => {
+  test("otro cliente no puede cancelar la urgencia ajena", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
     assert.equal((await accion(ctx.clienteB, ctx.urgencia, "cancel")).status, 404);
   });
 
-  test("un veterinario fuera de turno no ve ni acepta urgencias; uno de turno ve los datos de contacto", async () => {
+  test("un veterinario con un bloqueo de agenda no recibe urgencias; los demas ven los datos de contacto", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
     const vet2 = await tokenDe(ctx.emails.vet2);
-    const sin = await abiertas(vet2);
-    assert.deepEqual({ onDuty: sin.data.onDuty, total: sin.data.requests.length }, { onDuty: false, total: 0 });
-    assert.equal((await accion(vet2, ctx.urgencia, "accept")).status, 409);
+    const bloqueo = await prisma.scheduleBlock.create({
+      data: {
+        vetProfileId: ctx.perfiles.vet2.id,
+        startsAt: new Date(Date.now() - 60 * 60000),
+        endsAt: new Date(Date.now() + 60 * 60000),
+        reason: "QA",
+      },
+    });
+    try {
+      const sin = await abiertas(vet2);
+      assert.deepEqual({ available: sin.data.available, total: sin.data.requests.length }, { available: false, total: 0 });
+      const r = await accion(vet2, ctx.urgencia, "accept");
+      assert.equal(r.status, 409);
+      assert.equal(r.data.code, "NOT_AVAILABLE");
+    } finally {
+      await prisma.scheduleBlock.delete({ where: { id: bloqueo.id } });
+    }
 
     const ve = await abiertas(ctx.vet);
-    assert.equal(ve.data.onDuty, true);
+    assert.equal(ve.data.available, true);
     const u = ve.data.requests.find((x) => x.id === ctx.urgencia);
     assert.deepEqual(
       { cliente: u.client.name, telefono: u.phone, mascota: u.pet.name, sintomas: u.symptoms },
@@ -1729,10 +1758,10 @@ describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
     assert.equal((await pedir(ctx.vet)).status, 403, "un veterinario no pide urgencias");
   });
 
-  test("una urgencia a domicilio solo llega a veterinarios que atienden a domicilio", async () => {
+  test("una urgencia a domicilio solo llega a veterinarios que atienden a domicilio", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
     assert.equal((await accion(ctx.clienteA, ctx.urgencia, "cancel")).status, 200);
-    const vet2 = await tokenDe(ctx.emails.vet2);
-    assert.equal((await turno(vet2, 4)).status, 200); // vet2 solo atiende en veterinaria
+    const vet2 = await tokenDe(ctx.emails.vet2); // vet2 solo atiende en veterinaria
 
     const r = await pedir(ctx.clienteA, { mode: "HOME", address: "Calle 1 # 2-3", petId: ctx.mascota });
     assert.equal(r.status, 201, errores(r));
@@ -1748,7 +1777,8 @@ describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
     assert.equal((await accion(ctx.clienteA, id, "cancel")).status, 200);
   });
 
-  test("si dos veterinarios la aceptan a la vez, solo uno se queda con ella", async () => {
+  test("si dos veterinarios la aceptan a la vez, solo uno se queda con ella", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
     const vet2 = await tokenDe(ctx.emails.vet2);
     const r = await pedir(ctx.clienteA, { petId: ctx.mascota });
     assert.equal(r.status, 201, errores(r));
@@ -1758,9 +1788,32 @@ describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
     assert.deepEqual([a.status, b.status].sort(), [200, 409]);
     ctx.ganador = a.status === 200 ? ctx.vet : vet2;
     ctx.libre = a.status === 200 ? vet2 : ctx.vet;
+    ctx.libreEmail = a.status === 200 ? ctx.emails.vet2 : ctx.emails.vet;
+    ctx.ganadorEmail = a.status === 200 ? ctx.emails.vet : ctx.emails.vet2;
   });
 
-  test("el dueño ve quien la atiende y como contactarlo, y recibe un aviso", async () => {
+  test("al aceptar, la urgencia ocupa la agenda del veterinario con una cita confirmada", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const cita = await citaDe(ctx.urgencia);
+    assert.ok(cita, "se creo la cita");
+    assert.equal(cita.status, "CONFIRMED");
+    assert.equal(cita.durationMinutes, 30);
+    assert.match(cita.notes, /^URGENCIA: /);
+    assert.equal((await perfilDe(ctx.ganadorEmail)).id, cita.vetProfileId);
+
+    const agenda = await http("GET", "/appointments", { token: ctx.ganador });
+    assert.ok(agenda.data.appointments.some((c) => c.id === cita.id), "aparece en Mi agenda");
+    const mias = await http("GET", "/appointments", { token: ctx.clienteA });
+    assert.ok(mias.data.appointments.some((c) => c.id === cita.id), "y en las citas del dueño");
+
+    // Se gestiona desde Urgencias, no desde la agenda.
+    const r = await http("PATCH", `/appointments/${cita.id}/cancel`, { token: ctx.ganador });
+    assert.equal(r.status, 409);
+    assert.equal(r.data.code, "EMERGENCY_APPOINTMENT");
+  });
+
+  test("el dueño ve quien la atiende y como contactarlo, y recibe un aviso", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
     const m = await mia(ctx.clienteA);
     assert.equal(m.data.active.status, "ACCEPTED");
     assert.match(m.data.active.vet.name, new RegExp(`${NOMBRE_VET}|Vet Rechazado ${RUN}`));
@@ -1772,16 +1825,19 @@ describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
     assert.match(avisos.data.notifications[0].message, /aceptó tu urgencia/);
   });
 
-  test("un veterinario con una urgencia en curso no puede aceptar otra", async () => {
+  test("un veterinario con una urgencia en curso no recibe ni acepta otra", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
     const b = await pedir(ctx.clienteB);
     assert.equal(b.status, 201, errores(b));
+    assert.equal((await abiertas(ctx.ganador)).data.available, false);
     const r = await accion(ctx.ganador, b.data.emergency.id, "accept");
     assert.equal(r.status, 409);
-    assert.match(r.data.message, /Ya tienes una urgencia en curso/);
+    assert.equal(r.data.code, "NOT_AVAILABLE");
     assert.equal((await accion(ctx.clienteB, b.data.emergency.id, "cancel")).status, 200);
   });
 
-  test("al aceptar una urgencia, el veterinario accede a la historia de esa mascota hasta que la libera", async () => {
+  test("al aceptar una urgencia, el veterinario accede a la historia de esa mascota hasta que la libera", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
     const rex = await http("POST", "/pets", {
       token: ctx.clienteB,
       body: { name: "Rex", species: "Perro", sex: "Macho", birthDate: "2021-02-02" },
@@ -1795,16 +1851,21 @@ describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
 
     assert.equal((await accion(ctx.libre, u.data.emergency.id, "accept")).status, 200);
     assert.equal((await historia()).status, 200, "con la urgencia aceptada");
+    const citaUno = await citaDe(u.data.emergency.id);
+    assert.equal(citaUno.status, "CONFIRMED");
 
     const liberada = await accion(ctx.libre, u.data.emergency.id, "release");
     assert.equal(liberada.status, 200, errores(liberada));
     assert.equal((await historia()).status, 404, "al liberarla pierde el acceso");
     assert.equal((await mia(ctx.clienteB)).data.active.status, "OPEN");
+    assert.equal((await prisma.appointment.findUnique({ where: { id: citaUno.id } })).status, "CANCELLED", "la agenda queda libre");
     const aviso = await http("GET", "/notifications", { token: ctx.clienteB });
     assert.match(aviso.data.notifications[0].message, /no puede atender tu urgencia/);
 
     assert.equal((await accion(ctx.libre, u.data.emergency.id, "accept")).status, 200);
+    const citaDos = await citaDe(u.data.emergency.id);
     assert.equal((await accion(ctx.libre, u.data.emergency.id, "complete")).status, 200);
+    assert.equal((await prisma.appointment.findUnique({ where: { id: citaDos.id } })).status, "COMPLETED");
     assert.equal((await historia()).status, 200, "atendida: conserva el acceso a la historia");
 
     const m = await mia(ctx.clienteB);
@@ -1818,15 +1879,55 @@ describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
     assert.equal((await accion(ctx.libre, u.data.emergency.id, "release")).status, 409);
   });
 
-  test("si el dueño cancela una urgencia aceptada, se avisa al veterinario", async () => {
+  test("si el veterinario tiene una cita en ese rato, la urgencia tiene prioridad y se pide reagendar", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const perfil = await perfilDe(ctx.libreEmail);
+    const cita = await prisma.appointment.create({
+      data: {
+        mode: "CLINIC",
+        scheduledAt: new Date(Date.now() - 5 * 60000),
+        durationMinutes: 60,
+        status: "CONFIRMED",
+        clientId: (await prisma.user.findUnique({ where: { email: ctx.emails.clienteA } })).id,
+        vetProfileId: perfil.id,
+      },
+    });
+    const u = await pedir(ctx.clienteB);
+    assert.equal(u.status, 201, errores(u));
+
+    // Aun con la cita, sigue recibiendo la urgencia.
+    assert.ok((await abiertas(ctx.libre)).data.requests.some((x) => x.id === u.data.emergency.id));
+
+    const aviso = await accion(ctx.libre, u.data.emergency.id, "accept");
+    assert.equal(aviso.status, 409);
+    assert.equal(aviso.data.code, "APPOINTMENT_CONFLICT");
+    assert.equal(aviso.data.conflicts.length, 1);
+    assert.equal(aviso.data.conflicts[0].id, cita.id);
+    assert.equal((await prisma.appointment.findUnique({ where: { id: cita.id } })).status, "CONFIRMED", "nada cambia sin confirmar");
+
+    const ok = await accion(ctx.libre, u.data.emergency.id, "accept", { rescheduleConflicts: true });
+    assert.equal(ok.status, 200, errores(ok));
+    assert.match(ok.data.message, /reagendar a 1 cliente/);
+    assert.equal((await prisma.appointment.findUnique({ where: { id: cita.id } })).status, "CANCELLED");
+    const nuevo = await http("GET", "/notifications", { token: ctx.clienteA });
+    assert.match(nuevo.data.notifications[0].message, /urgencia, que tiene prioridad.*reagendes/);
+
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "complete")).status, 200);
+  });
+
+  test("si el dueño cancela una urgencia aceptada, se avisa al veterinario y se libera la agenda", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
     const m = await mia(ctx.clienteA);
+    const cita = await citaDe(m.data.active.id);
     assert.equal((await accion(ctx.clienteA, m.data.active.id, "cancel")).status, 200);
     const aviso = await http("GET", "/notifications", { token: ctx.ganador });
     assert.match(aviso.data.notifications[0].message, /canceló su urgencia/);
+    assert.equal((await prisma.appointment.findUnique({ where: { id: cita.id } })).status, "CANCELLED");
     assert.equal((await accion(ctx.ganador, m.data.active.id, "complete")).status, 409);
   });
 
-  test("una urgencia que nadie acepta a tiempo vence", async () => {
+  test("una urgencia que nadie acepta a tiempo vence", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
     const x = await pedir(ctx.clienteA);
     assert.equal(x.status, 201, errores(x));
     await prisma.emergencyRequest.update({
@@ -1840,13 +1941,10 @@ describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
     assert.equal((await accion(ctx.ganador, x.data.emergency.id, "accept")).status, 409);
   });
 
-  test("al salir de turno el veterinario deja de recibir urgencias", async () => {
-    assert.equal((await turno(ctx.vet, 0)).status, 200);
-    assert.equal((await abiertas(ctx.vet)).data.onDuty, false);
-    const vet2 = await tokenDe(ctx.emails.vet2);
-    assert.equal((await turno(vet2, 0)).status, 200);
-    const disp = await http("GET", "/emergencies/availability", { token: ctx.clienteA });
-    assert.ok(disp.data.onDuty >= 0);
+  test("fuera de su horario el veterinario deja de recibir urgencias", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    await prisma.availability.deleteMany({ where: { id: { in: ctx.horarios } } });
+    assert.equal((await abiertas(ctx.vet)).data.available, false);
   });
 });
 

@@ -287,6 +287,17 @@ async function cargarCitaPropia(req, res) {
   return appointment;
 }
 
+// La cita que nace de una urgencia se gestiona desde Urgencias, no desde la agenda.
+async function esDeUrgencia(res, appointment) {
+  const urgencia = await prisma.emergencyRequest.findFirst({ where: { appointmentId: appointment.id }, select: { id: true } });
+  if (!urgencia) return false;
+  res.status(409).json({
+    message: "Esta cita nació de una urgencia: se cierra o se libera desde la sección Urgencias.",
+    code: "EMERGENCY_APPOINTMENT",
+  });
+  return true;
+}
+
 function motivoOpcional(body) {
   const texto = body?.reason === undefined || body?.reason === null ? "" : String(body.reason).trim();
   return texto;
@@ -304,6 +315,7 @@ async function cancelAppointment(req, res) {
   try {
     const appointment = await cargarCitaPropia(req, res);
     if (!appointment) return undefined;
+    if (await esDeUrgencia(res, appointment)) return undefined;
 
     const motivo = motivoOpcional(req.body);
     if (motivo.length > MAX_REASON_LENGTH) {
@@ -368,6 +380,7 @@ async function rescheduleAppointment(req, res) {
   try {
     const appointment = await cargarCitaPropia(req, res);
     if (!appointment) return undefined;
+    if (await esDeUrgencia(res, appointment)) return undefined;
 
     const { date, time } = req.body || {};
     const motivo = motivoOpcional(req.body);
@@ -469,6 +482,7 @@ async function confirmAppointment(req, res) {
   try {
     const appointment = await cargarCitaPropia(req, res);
     if (!appointment) return undefined;
+    if (await esDeUrgencia(res, appointment)) return undefined;
 
     if (appointment.status !== "PENDING") {
       return res.status(409).json({ message: "Solo se pueden confirmar citas pendientes." });
@@ -502,6 +516,7 @@ async function completeAppointment(req, res) {
   try {
     const appointment = await cargarCitaPropia(req, res);
     if (!appointment) return undefined;
+    if (await esDeUrgencia(res, appointment)) return undefined;
 
     if (!ACTIVE_STATUSES.includes(appointment.status)) {
       return res.status(409).json({ message: "Solo se pueden completar citas pendientes o confirmadas." });

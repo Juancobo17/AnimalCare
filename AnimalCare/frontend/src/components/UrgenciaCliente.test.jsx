@@ -16,7 +16,7 @@ vi.mock("../services/emergency.service", async (original) => ({
 }));
 vi.mock("../services/pet.service", async (original) => ({ ...(await original()), listarMascotas: vi.fn() }));
 
-const DISPONIBLE = { onDuty: 2, home: 1, clinic: 2, ttlMinutes: 30 };
+const DISPONIBLE = { available: 2, home: 1, clinic: 2, ttlMinutes: 30 };
 const ahora = () => new Date().toISOString();
 
 beforeEach(() => {
@@ -24,22 +24,22 @@ beforeEach(() => {
   disponibilidadUrgencias.mockResolvedValue(DISPONIBLE);
   misUrgencias.mockResolvedValue({ active: null, emergencies: [] });
   listarMascotas.mockResolvedValue({ pets: [{ id: 5, name: "Michi", species: "Gato" }] });
-  pedirUrgencia.mockResolvedValue({ message: "Avisamos a 2 veterinario(s) de turno." });
+  pedirUrgencia.mockResolvedValue({ message: "Avisamos a 2 veterinario(s) disponibles." });
   cancelarUrgencia.mockResolvedValue({ message: "Urgencia cancelada." });
 });
 
 describe("UrgenciaCliente", () => {
-  test("muestra el aviso de emergencia vital, los veterinarios de turno y el formulario", async () => {
+  test("muestra el aviso de emergencia vital, los veterinarios disponibles y el formulario", async () => {
     render(<UrgenciaCliente />);
-    expect(await screen.findByText(/Hay 2 veterinario\(s\) de turno ahora/)).toBeInTheDocument();
+    expect(await screen.findByText(/Hay 2 veterinario\(s\) atendiendo ahora/)).toBeInTheDocument();
     expect(screen.getByText(/clínica veterinaria más cercana/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pedir atención urgente" })).toBeEnabled();
   });
 
-  test("sin veterinarios de turno avisa y no deja enviar", async () => {
-    disponibilidadUrgencias.mockResolvedValue({ onDuty: 0, home: 0, clinic: 0, ttlMinutes: 30 });
+  test("sin veterinarios atendiendo avisa y no deja enviar", async () => {
+    disponibilidadUrgencias.mockResolvedValue({ available: 0, home: 0, clinic: 0, ttlMinutes: 30 });
     render(<UrgenciaCliente />);
-    expect(await screen.findByText(/no hay veterinarios de turno/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no hay veterinarios atendiendo/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pedir atención urgente" })).toBeDisabled();
   });
 
@@ -74,7 +74,7 @@ describe("UrgenciaCliente", () => {
       address: null,
       phone: "3001234567",
     });
-    expect(await screen.findByText("Avisamos a 2 veterinario(s) de turno.")).toBeInTheDocument();
+    expect(await screen.findByText("Avisamos a 2 veterinario(s) disponibles.")).toBeInTheDocument();
   });
 
   test("mientras nadie acepta muestra la busqueda y deja cancelar con confirmacion", async () => {
@@ -94,7 +94,7 @@ describe("UrgenciaCliente", () => {
     });
     render(<UrgenciaCliente />);
 
-    expect(await screen.findByText(/Buscando un veterinario de turno/)).toBeInTheDocument();
+    expect(await screen.findByText(/Buscando un veterinario disponible/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Pedir atención urgente" })).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Cancelar la solicitud" }));
