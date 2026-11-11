@@ -50,9 +50,17 @@ export async function confirmarCita(id) {
   return respuesta.data;
 }
 
+// PATCH /api/appointments/:id/start
+// El veterinario inicia la atencion: la cita pasa a "en atencion" y se llena la historia clinica.
+export async function iniciarCita(id) {
+  const respuesta = await api.patch(`/appointments/${id}/start`);
+  return respuesta.data;
+}
+
 // PATCH /api/appointments/:id/complete  (AN-16)
-export async function completarCita(id) {
-  const respuesta = await api.patch(`/appointments/${id}/complete`);
+// Termina la atencion. Con mascota exige la historia clinica, salvo skipRecord (terminar sin registrar).
+export async function completarCita(id, { skipRecord = false } = {}) {
+  const respuesta = await api.patch(`/appointments/${id}/complete`, skipRecord ? { skipRecord: true } : {});
   return respuesta.data;
 }
 
@@ -87,7 +95,7 @@ export function esCancelable(cita) {
   return esActiva(cita) && inicioDeCita(cita).getTime() > Date.now();
 }
 
-// Se puede marcar como atendida cuando su hora ya llego.
+// Se puede iniciar la atencion cuando su hora ya llego.
 export function esCompletable(cita) {
   return esActiva(cita) && inicioDeCita(cita).getTime() <= Date.now();
 }
@@ -96,6 +104,7 @@ export function esCompletable(cita) {
 export const ESTADOS_CITA = {
   PENDING: "Pendiente",
   CONFIRMED: "Confirmada",
+  IN_PROGRESS: "En atención",
   CANCELLED: "Cancelada",
   COMPLETED: "Completada",
 };

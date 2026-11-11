@@ -738,6 +738,11 @@ describe("AN-16: el veterinario modifica las citas de su agenda", () => {
       data: { scheduledAt: new Date(Date.now() - 60 * 60 * 1000) },
     });
 
+    // Se inicia la atencion y luego se termina (una cita sin mascota no pide historia clinica).
+    assert.equal((await http("PATCH", `/appointments/${cita.data.appointment.id}/complete`, { token: ctx.vet })).status, 409);
+    const inicio = await http("PATCH", `/appointments/${cita.data.appointment.id}/start`, { token: ctx.vet });
+    assert.equal(inicio.status, 200, errores(inicio));
+    assert.equal(inicio.data.appointment.status, "IN_PROGRESS");
     const r = await http("PATCH", `/appointments/${cita.data.appointment.id}/complete`, { token: ctx.vet });
     assert.equal(r.status, 200, errores(r));
     assert.equal(r.data.appointment.status, "COMPLETED");
@@ -936,7 +941,13 @@ describe("Mejora: resenas despues de una cita atendida", () => {
       where: { id: ctx.citaResena },
       data: { scheduledAt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
     });
-    assert.equal((await http("PATCH", `/appointments/${ctx.citaResena}/complete`, { token: ctx.vet })).status, 200);
+    assert.equal((await http("PATCH", `/appointments/${ctx.citaResena}/start`, { token: ctx.vet })).status, 200);
+    // Con mascota, terminar pide la historia clinica o terminar sin registrar a proposito.
+    assert.equal((await http("PATCH", `/appointments/${ctx.citaResena}/complete`, { token: ctx.vet })).status, 409);
+    assert.equal(
+      (await http("PATCH", `/appointments/${ctx.citaResena}/complete`, { token: ctx.vet, body: { skipRecord: true } })).status,
+      200
+    );
 
     const invalida = await http("POST", `/appointments/${ctx.citaResena}/review`, {
       token: ctx.clienteA,
@@ -1077,7 +1088,7 @@ describe("AN-18: crear historia clinica", () => {
   });
 
   test("la consulta se registra mientras la cita esta en curso, sin esperar a que termine", async () => {
-    const cita = await citaEnCurso(ctx.mascota, "CONFIRMED");
+    const cita = await citaEnCurso(ctx.mascota, "IN_PROGRESS");
     const r = await http("POST", "/medical-records", {
       token: ctx.vet,
       body: { petId: ctx.mascota, appointmentId: cita.id, reason: "Control en consulta", diagnosis: "Evoluciona bien" },
@@ -1104,7 +1115,7 @@ describe("AN-18: crear historia clinica", () => {
       body: { petId: ctx.mascota, appointmentId: futura.id, reason: "x", diagnosis: "x" },
     });
     assert.equal(antes.status, 409);
-    assert.match(antes.data.message, /aún no ha empezado/);
+    assert.match(antes.data.message, /Inicia la atención/);
   });
 
   test("un cliente no puede escribir en la historia", async () => {
@@ -1113,6 +1124,94 @@ describe("AN-18: crear historia clinica", () => {
       body: { petId: ctx.mascota, reason: "x", diagnosis: "x" },
     });
     assert.equal(r.status, 403);
+  });
+});
+
+describe("Atencion de la cita: iniciar, llenar la historia clinica y terminar", () => {
+  const empezar = (id) => http("PATCH", `/appointments/${id}/start`, { token: ctx.vet });
+  const terminar = (id, body) => http("PATCH", `/appointments/${id}/complete`, { token: ctx.vet, body });
+  const registrar = (cita, extra = {}) =>
+    http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, appointmentId: cita.id, reason: "Control", diagnosis: "Sano", ...extra },
+    });
+
+  test("no se inicia una cita que aun no llega, ni se registra ni se termina sin iniciarla", async () => {
+    const futura = await prisma.appointment.create({
+      data: {
+        mode: "CLINIC",
+        scheduledAt: new Date(Date.now() + 5 * 60 * 60 * 1000),
+        durationMinutes: 30,
+        status: "CONFIRMED",
+        clientId: (await prisma.user.findUnique({ where: { email: ctx.emails.clienteA } })).id,
+        vetProfileId: ctx.vetProfileId,
+        petId: ctx.mascota,
+      },
+    });
+    assert.equal((await empezar(futura.id)).status, 409);
+
+    const sinIniciar = await citaEnCurso(ctx.mascota, "CONFIRMED");
+    assert.equal((await registrar(sinIniciar)).status, 409, "la historia se llena despues de iniciar");
+    assert.equal((await terminar(sinIniciar.id)).status, 409, "no se termina sin iniciar");
+    await prisma.appointment.update({ where: { id: sinIniciar.id }, data: { status: "COMPLETED" } });
+    await prisma.appointment.update({ where: { id: futura.id }, data: { status: "CANCELLED" } });
+  });
+
+  test("al iniciar, la cita queda en atencion y no se cancela ni se reagenda", async () => {
+    const cita = await citaEnCurso(ctx.mascota, "CONFIRMED");
+    const r = await empezar(cita.id);
+    assert.equal(r.status, 200, errores(r));
+    assert.equal(r.data.appointment.status, "IN_PROGRESS");
+    assert.equal((await empezar(cita.id)).status, 200, "iniciar de nuevo es inofensivo (Continuar atencion)");
+
+    assert.equal((await http("PATCH", `/appointments/${cita.id}/cancel`, { token: ctx.vet })).status, 409);
+    assert.equal(
+      (await http("PATCH", `/appointments/${cita.id}/reschedule`, { token: ctx.vet, body: { date: VIERNES, time: "09:00" } })).status,
+      409
+    );
+
+    const historia = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.vet });
+    const enCurso = historia.data.inProgressAppointments.find((c) => c.id === cita.id);
+    assert.deepEqual({ status: enCurso.status, recordId: enCurso.recordId }, { status: "IN_PROGRESS", recordId: null });
+    ctx.citaAtencion = cita;
+  });
+
+  test("guardar avance y terminar: pide la historia clinica antes de cerrar y avisa al dueño", async () => {
+    const cita = ctx.citaAtencion;
+    const sinHistoria = await terminar(cita.id);
+    assert.equal(sinHistoria.status, 409);
+    assert.equal(sinHistoria.data.code, "RECORD_REQUIRED");
+
+    const avance = await registrar(cita, { diagnosis: "En observacion" });
+    assert.equal(avance.status, 201, errores(avance));
+    // El avance se puede seguir editando mientras la cita esta en atencion.
+    const historia = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.vet });
+    assert.equal(historia.data.inProgressAppointments.find((c) => c.id === cita.id).recordId, avance.data.record.id);
+    const editar = await http("PUT", `/medical-records/${avance.data.record.id}`, {
+      token: ctx.vet,
+      body: { reason: "Control", diagnosis: "Recuperado", treatment: "Reposo" },
+    });
+    assert.equal(editar.status, 200, errores(editar));
+
+    const fin = await terminar(cita.id);
+    assert.equal(fin.status, 200, errores(fin));
+    assert.equal(fin.data.appointment.status, "COMPLETED");
+    const avisos = await http("GET", "/notifications", { token: ctx.clienteA });
+    assert.match(avisos.data.notifications[0].message, /terminó la atención/);
+    assert.equal((await terminar(cita.id)).status, 409, "ya terminada");
+    // Se anula para no alterar el conteo de entradas de las pruebas siguientes.
+    const anulada = await http("PATCH", `/medical-records/${avance.data.record.id}/annul`, {
+      token: ctx.vet,
+      body: { reason: "Entrada de prueba del flujo de atencion" },
+    });
+    assert.equal(anulada.status, 200, errores(anulada));
+  });
+
+  test("terminar sin registrar es una decision explicita", async () => {
+    const cita = await citaEnCurso(ctx.mascota, "IN_PROGRESS");
+    assert.equal((await terminar(cita.id)).status, 409);
+    const r = await terminar(cita.id, { skipRecord: true });
+    assert.equal(r.status, 200, errores(r));
   });
 });
 
@@ -1974,6 +2073,42 @@ describe("Urgencias (lo que AN-23 llamaba emergencias)", () => {
     assert.match(aviso.data.notifications[0].message, /canceló su urgencia/);
     assert.equal((await prisma.appointment.findUnique({ where: { id: cita.id } })).status, "CANCELLED");
     assert.equal((await accion(ctx.ganador, m.data.active.id, "complete")).status, 409);
+  });
+
+  test("la urgencia se atiende como una cita: iniciar, historia clinica y terminar", async (t) => {
+    if (!ctx.enHorario) return t.skip("sin horario de prueba");
+    const u = await pedir(ctx.clienteA, { petId: ctx.mascota });
+    assert.equal(u.status, 201, errores(u));
+    assert.equal((await accion(ctx.libre, u.data.emergency.id, "accept")).status, 200);
+    const cita = await citaDe(u.data.emergency.id);
+
+    const vista = await mia(ctx.libre);
+    assert.equal(vista.data.active.appointment.id, cita.id, "el veterinario ve la cita de la urgencia");
+    assert.equal(vista.data.active.appointment.status, "CONFIRMED");
+
+    const inicio = await http("PATCH", `/appointments/${cita.id}/start`, { token: ctx.libre });
+    assert.equal(inicio.status, 200, errores(inicio));
+    assert.equal((await mia(ctx.clienteA)).data.active.inProgress, true, "el dueño ve que la atienden");
+
+    const liberar = await accion(ctx.libre, u.data.emergency.id, "release");
+    assert.equal(liberar.status, 409, "iniciada, ya no se libera");
+    assert.match(liberar.data.message, /Ya iniciaste la atención/);
+
+    const sinHistoria = await http("PATCH", `/appointments/${cita.id}/complete`, { token: ctx.libre });
+    assert.equal(sinHistoria.data.code, "RECORD_REQUIRED");
+    const entrada = await http("POST", "/medical-records", {
+      token: ctx.libre,
+      body: { petId: ctx.mascota, appointmentId: cita.id, reason: "Vomito persistente", diagnosis: "Gastroenteritis" },
+    });
+    assert.equal(entrada.status, 201, errores(entrada));
+
+    const fin = await http("PATCH", `/appointments/${cita.id}/complete`, { token: ctx.libre });
+    assert.equal(fin.status, 200, errores(fin));
+    const m = await mia(ctx.clienteA);
+    assert.equal(m.data.active, null);
+    assert.equal(m.data.emergencies.find((e) => e.id === u.data.emergency.id).status, "COMPLETED");
+    const avisos = await http("GET", "/notifications", { token: ctx.clienteA });
+    assert.match(avisos.data.notifications[0].message, /marcó tu urgencia como atendida/);
   });
 
   test("una urgencia que nadie acepta a tiempo vence", async (t) => {

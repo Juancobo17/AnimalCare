@@ -6,6 +6,7 @@ const {
   cancelAppointment,
   rescheduleAppointment,
   confirmAppointment,
+  startAppointment,
   completeAppointment,
   reviewAppointment,
 } = require("../controllers/appointment.controller");
@@ -28,6 +29,7 @@ router.patch("/:id/cancel", requireRole("CLIENT", "VETERINARIAN"), cancelAppoint
 // AN-16: gestion de la agenda por el veterinario.
 router.patch("/:id/reschedule", requireRole("VETERINARIAN"), rescheduleAppointment);
 router.patch("/:id/confirm", requireRole("VETERINARIAN"), confirmAppointment);
+router.patch("/:id/start", requireRole("VETERINARIAN"), startAppointment);
 router.patch("/:id/complete", requireRole("VETERINARIAN"), completeAppointment);
 
 // Resena del cliente despues de una cita atendida.

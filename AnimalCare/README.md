@@ -402,7 +402,8 @@ maquina.
 | PATCH  | /api/appointments/:id/cancel | Si  | CLIENT, VETERINARIAN | Cancela una cita propia y libera el horario (AN-14, AN-15). Body opcional `{ reason }` |
 | PATCH  | /api/appointments/:id/reschedule | Si | VETERINARIAN | Mueve la cita a otro horario libre `{ date, time, reason? }` (AN-16) |
 | PATCH  | /api/appointments/:id/confirm | Si | VETERINARIAN | Confirma una cita pendiente (AN-16)         |
-| PATCH  | /api/appointments/:id/complete | Si | VETERINARIAN | Marca como atendida una cita cuya hora ya llego (AN-16) |
+| PATCH  | /api/appointments/:id/start | Si | VETERINARIAN | Inicia la atencion (desde la hora de la cita): pasa a `IN_PROGRESS` |
+| PATCH  | /api/appointments/:id/complete | Si | VETERINARIAN | Termina la atencion de una cita en atencion; con mascota exige la entrada de historia o `{ skipRecord: true }` (AN-16) |
 | POST   | /api/appointments/:id/review | Si  | CLIENT   | Califica una cita atendida `{ rating: 1-5, comment? }` |
 | GET    | /api/medical-records/pets/:petId | Si | CLIENT, VETERINARIAN | Historia clinica de una mascota (AN-21) |
 | POST   | /api/medical-records     | Si      | VETERINARIAN | Crea la entrada de una cita en curso o pasada, `appointmentId` obligatorio (AN-18) |

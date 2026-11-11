@@ -91,7 +91,7 @@ async function citasEnConflicto(vetProfileId, desde) {
   const citas = await prisma.appointment.findMany({
     where: {
       vetProfileId,
-      status: { in: ["PENDING", "CONFIRMED"] },
+      status: { in: ["PENDING", "CONFIRMED", "IN_PROGRESS"] },
       scheduledAt: { gte: new Date(desde.getTime() - MAX_DURATION_MINUTES * 60000), lt: fin },
     },
     include: { client: { select: { id: true, name: true } } },
@@ -100,6 +100,7 @@ async function citasEnConflicto(vetProfileId, desde) {
 }
 
 const INCLUDE = {
+  appointment: { select: { id: true, status: true } },
   pet: { select: { id: true, name: true, species: true } },
   client: { select: { id: true, name: true } },
   vetProfile: { include: { user: { select: { id: true, name: true } } } },
@@ -119,6 +120,7 @@ function toClientView(r) {
     acceptedAt: r.acceptedAt,
     closedAt: r.closedAt,
     pet: r.pet,
+    inProgress: r.appointment ? r.appointment.status === "IN_PROGRESS" : false,
     // Los datos de contacto del veterinario solo cuando acepto.
     vet: r.vetProfile
       ? {
@@ -146,6 +148,8 @@ function toVetView(r) {
     closedAt: r.closedAt,
     client: { name: r.client.name },
     pet: r.pet,
+    // La cita que ocupa su agenda: desde ahi se inicia y se termina la atencion.
+    appointment: r.appointment ? { id: r.appointment.id, status: r.appointment.status } : null,
   };
 }
 
@@ -463,7 +467,7 @@ async function disponibleAhora(perfil) {
 async function cerrarCita(appointmentId, status) {
   if (!appointmentId) return;
   await prisma.appointment.updateMany({
-    where: { id: appointmentId, status: { in: ["PENDING", "CONFIRMED"] } },
+    where: { id: appointmentId, status: { in: ["PENDING", "CONFIRMED", "IN_PROGRESS"] } },
     data: { status },
   });
 }
@@ -520,6 +524,9 @@ async function releaseEmergency(req, res) {
   try {
     const urgencia = await cargarPropiaAceptada(req, res);
     if (!urgencia) return undefined;
+    if (urgencia.appointment?.status === "IN_PROGRESS") {
+      return res.status(409).json({ message: "Ya iniciaste la atención: termínala desde la historia clínica." });
+    }
 
     const r = await prisma.emergencyRequest.updateMany({
       where: { id: urgencia.id, vetProfileId: req.user.vetProfile.id, status: "ACCEPTED" },

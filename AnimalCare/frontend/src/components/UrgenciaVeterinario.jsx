@@ -1,7 +1,7 @@
 // Urgencias, vista del veterinario: recibe las urgencias mientras esta dentro de su
 // horario (Mi horario), acepta una y la atiende. Aceptarla ocupa su agenda.
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import Alerta from "./Alerta";
 import { useSondeo } from "../hooks/useSondeo";
@@ -17,9 +17,11 @@ import {
   horaLocal,
 } from "../services/emergency.service";
 import { MODALIDADES } from "../services/vet.service";
+import { iniciarCita } from "../services/appointment.service";
 import { obtenerMensajesDeError } from "../services/api";
 
 function UrgenciaVeterinario() {
+  const navigate = useNavigate();
   const [estado, setEstado] = useState(null); // { available, canAttend }
   const [conflicto, setConflicto] = useState(null); // aceptar choca con citas: { id, message, conflicts }
   const [abiertas, setAbiertas] = useState([]);
@@ -44,6 +46,20 @@ function UrgenciaVeterinario() {
   }
 
   useSondeo(cargar, INTERVALO_SONDEO_MS);
+
+  // Iniciar la atencion lleva a la historia clinica de la mascota, ligada a la cita de la urgencia.
+  async function iniciarAtencion(urgencia) {
+    setErrores([]);
+    setExito([]);
+    setOcupado("iniciar");
+    try {
+      await iniciarCita(urgencia.appointment.id);
+      navigate(`/pacientes/${urgencia.pet.id}?cita=${urgencia.appointment.id}`);
+    } catch (error) {
+      setErrores(obtenerMensajesDeError(error));
+      setOcupado(null);
+    }
+  }
 
   async function ejecutar(clave, accion) {
     setErrores([]);
@@ -121,7 +137,12 @@ function UrgenciaVeterinario() {
       {activa && (
         <div className="tarjeta urgencia-estado urgencia-aceptada" role="status">
           <div className="urgencia-detalle">
-            <h3>Urgencia en curso</h3>
+            <h3>
+              Urgencia en curso
+              {activa.appointment?.status === "IN_PROGRESS" && (
+                <span className="etiqueta etiqueta-confirmed urgencia-etiqueta-atencion"> En atención</span>
+              )}
+            </h3>
             <p>
               <strong>{activa.client.name}</strong>
               {activa.pet && (
@@ -141,20 +162,35 @@ function UrgenciaVeterinario() {
             <p className="texto-suave">“{activa.symptoms}” · aceptada {haceCuanto(activa.acceptedAt)}</p>
 
             <div className="acciones-linea">
-              {activa.pet && (
-                <Link to={`/pacientes/${activa.pet.id}`} className="boton boton-secundario boton-auto">
-                  Ver historia clínica
+              {activa.pet && activa.appointment?.status === "IN_PROGRESS" && (
+                <Link
+                  to={`/pacientes/${activa.pet.id}?cita=${activa.appointment.id}`}
+                  className="boton boton-primario boton-auto"
+                >
+                  Continuar atención
                 </Link>
               )}
-              <button
-                type="button"
-                className="boton boton-primario boton-auto"
-                disabled={ocupado === "completar"}
-                onClick={() => ejecutar("completar", () => completarUrgencia(activa.id))}
-              >
-                Marcar como atendida
-              </button>
-              {confirmandoLiberar ? (
+              {activa.pet && activa.appointment && activa.appointment.status !== "IN_PROGRESS" && (
+                <button
+                  type="button"
+                  className="boton boton-primario boton-auto"
+                  disabled={ocupado === "iniciar"}
+                  onClick={() => iniciarAtencion(activa)}
+                >
+                  Iniciar atención
+                </button>
+              )}
+              {!activa.pet && (
+                <button
+                  type="button"
+                  className="boton boton-primario boton-auto"
+                  disabled={ocupado === "completar"}
+                  onClick={() => ejecutar("completar", () => completarUrgencia(activa.id))}
+                >
+                  Terminar atención
+                </button>
+              )}
+              {activa.appointment?.status === "IN_PROGRESS" ? null : confirmandoLiberar ? (
                 <span className="acciones-linea" role="alertdialog">
                   <strong>¿No puedes atenderla?</strong>
                   <button

@@ -21,7 +21,7 @@ import { obtenerMensajesDeError, esErrorDeConexion } from "../services/api";
 
 // Filtros de estado de la agenda del veterinario.
 const FILTROS_AGENDA = [
-  { valor: "ACTIVAS", texto: "Pendientes y confirmadas", cumple: esActiva },
+  { valor: "ACTIVAS", texto: "Pendientes y en atención", cumple: (c) => esActiva(c) || c.status === "IN_PROGRESS" },
   { valor: "PENDING", texto: "Pendientes", cumple: (c) => c.status === "PENDING" },
   { valor: "TODAS", texto: "Todas", cumple: () => true },
 ];

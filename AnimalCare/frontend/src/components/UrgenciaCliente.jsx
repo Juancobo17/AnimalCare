@@ -161,6 +161,11 @@ function UrgenciaCliente() {
         <div className="tarjeta urgencia-estado urgencia-aceptada" role="status">
           <div>
             <h3>{activa.vet.name} atenderá tu urgencia</h3>
+            {activa.inProgress && (
+              <p>
+                <strong>Tu mascota está siendo atendida ahora.</strong>
+              </p>
+            )}
             <p>
               {activa.mode === "CLINIC"
                 ? `Te espera en ${activa.vet.address || "su veterinaria"}.`
