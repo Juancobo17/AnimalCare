@@ -19,7 +19,6 @@ import {
   formatearFecha,
   esCancelable,
   esCompletable,
-  inicioDeCita,
   cancelarCita,
   reprogramarCita,
   confirmarCita,
