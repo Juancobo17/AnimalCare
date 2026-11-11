@@ -97,12 +97,15 @@ jobs:
         working-directory: AnimalCare/frontend
         run: |
           npm ci
-          npx playwright install --with-deps chromium
           VITE_API_URL=http://localhost:4000/api npm run build
           npx vite preview --port 5173 > $RUNNER_TEMP/web.log 2>&1 &
           for i in $(seq 1 30); do curl -sf http://localhost:5173/login > /dev/null && break; sleep 1; done
       - name: Pruebas e2e
         working-directory: AnimalCare/frontend
+        # Se usa el Google Chrome que ya trae el ejecutor: evita descargar el
+        # navegador y sus dependencias con apt, que depende de la red.
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
         run: npm run test:e2e
       - name: Registros si algo falla
         if: failure()
