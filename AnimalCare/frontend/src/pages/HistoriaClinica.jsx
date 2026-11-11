@@ -51,6 +51,7 @@ function FormularioEntrada({ inicial, citasPendientes = [], textoBoton, onGuarda
   async function enviar(e) {
     e.preventDefault();
     const mensajes = [];
+    if (citasPendientes.length > 0 && !datos.appointmentId) mensajes.push("Elige la cita a la que pertenece la entrada.");
     if (datos.reason.trim() === "") mensajes.push("El motivo de consulta es obligatorio.");
     if (datos.diagnosis.trim() === "") mensajes.push("El diagnóstico es obligatorio.");
     if (mensajes.length > 0) {
@@ -74,9 +75,11 @@ function FormularioEntrada({ inicial, citasPendientes = [], textoBoton, onGuarda
 
       {citasPendientes.length > 0 && (
         <div className="campo">
-          <label htmlFor="cita">Consulta</label>
+          <label htmlFor="cita">
+            Cita <span className="obligatorio">*</span>
+          </label>
           <select id="cita" name="appointmentId" value={datos.appointmentId} onChange={cambiar}>
-            <option value="">Sin cita asociada</option>
+            <option value="">Elige la cita que estás atendiendo</option>
             {citasPendientes.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.when} · {c.service}
@@ -353,9 +356,9 @@ function HistoriaClinica() {
                   </div>
                 </div>
                 <div className="acciones-linea no-imprimir">
-                  {esVeterinario && formulario === null && (
+                  {esVeterinario && formulario === null && historia.pendingAppointments?.length > 0 && (
                     <button type="button" className="boton boton-primario boton-auto" onClick={() => setFormulario("nueva")}>
-                      + Nueva entrada
+                      + Registrar consulta
                     </button>
                   )}
                   {!esVeterinario && vigentes.length > 0 && (
@@ -370,11 +373,17 @@ function HistoriaClinica() {
                   Tienes {historia.pendingAppointments.length} consulta(s) con {pet.name} sin registrar en la historia.
                 </p>
               )}
+              {esVeterinario && historia.pendingAppointments?.length === 0 && (
+                <p className="aviso-suave">
+                  Cada entrada se registra desde una cita: podrás hacerlo en cuanto empiece la próxima consulta con{" "}
+                  {pet.name}.
+                </p>
+              )}
             </div>
 
             {esVeterinario && formulario === "nueva" && (
               <div className="tarjeta">
-                <h3>Nueva entrada</h3>
+                <h3>Registrar consulta</h3>
                 <FormularioEntrada
                   inicial={{
                     ...VACIA,

@@ -286,7 +286,7 @@ function CitaTarjeta({ cita, perspectiva = "cliente", onActualizada }) {
           inicioDeCita(cita).getTime() <= Date.now() && (
             <div className="cita-acciones">
               <Link to={`/pacientes/${cita.pet.id}?cita=${cita.id}`} className="boton boton-secundario boton-auto">
-                Registrar en historia clínica
+                Registrar consulta en la historia
               </Link>
             </div>
           )}
