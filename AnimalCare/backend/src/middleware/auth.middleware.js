@@ -6,6 +6,7 @@
 const jwt = require("jsonwebtoken");
 
 const prisma = require("../prisma");
+const { isBlocked, blockedResponse } = require("../utils/accountStatus");
 
 async function authenticate(req, res, next) {
   try {
@@ -38,6 +39,7 @@ async function authenticate(req, res, next) {
         name: true,
         email: true,
         role: true,
+        status: true,
         createdAt: true,
         // El perfil profesional solo existe si la cuenta es de un veterinario.
         vetProfile: {
@@ -54,6 +56,12 @@ async function authenticate(req, res, next) {
 
     if (!user) {
       return res.status(401).json({ message: "Sesion invalida o expirada. Inicia sesion nuevamente." });
+    }
+
+    // AN-37: si el administrador suspendio la cuenta mientras tenia la sesion
+    // abierta, el token deja de servir desde la siguiente peticion.
+    if (isBlocked(user.status)) {
+      return blockedResponse(res, user.status);
     }
 
     // Queda disponible para los controladores: req.user.id es el propietario.

@@ -50,6 +50,9 @@ async function createUser({ name, email, password, role = "CLIENT", profile = nu
       email,
       password: hashedPassword,
       role: "VETERINARIAN",
+      // El veterinario no queda visible ni puede atender hasta que el
+      // administrador valide su matricula (AN-7 escenario 8, AN-35).
+      status: "PENDING",
       vetProfile: {
         create: {
           license: profile.license,
@@ -97,6 +100,7 @@ function toPublicUser(user) {
     name: user.name,
     email: user.email,
     role: user.role,
+    status: user.status,
     createdAt: user.createdAt,
   };
 

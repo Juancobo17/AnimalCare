@@ -88,6 +88,17 @@ function toTimeOfDay(date) {
   return date.toISOString().slice(11, 16);
 }
 
+// Texto legible para las notificaciones: "jueves 12 de noviembre a las 09:00".
+function describeDateTime(date) {
+  const dia = date.toLocaleDateString("es-CO", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  });
+  return `${dia.replace(",", "")} a las ${toTimeOfDay(date)}`;
+}
+
 // Dos rangos de tiempo se cruzan si uno empieza antes de que el otro termine.
 // Un rango que empieza justo cuando el otro acaba NO se considera choque.
 function overlaps(startA, endA, startB, endB) {
@@ -156,6 +167,7 @@ module.exports = {
   combine,
   toDateString,
   toTimeOfDay,
+  describeDateTime,
   overlaps,
   buildSlots,
 };
