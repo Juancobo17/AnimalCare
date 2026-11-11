@@ -197,32 +197,37 @@ async function getPetHistory(req, res) {
     // Para el veterinario: citas suyas con esta mascota que ya empezaron (o pasaron)
     // y aun no tienen entrada. Es de donde sale cada entrada nueva.
     let pendingAppointments;
+    let inProgressAppointments;
     if (paraVeterinario) {
       const citas = await prisma.appointment.findMany({
         where: {
           vetProfileId: req.user.vetProfile.id,
           petId,
-          status: { in: ["PENDING", "CONFIRMED", "COMPLETED"] },
+          status: { in: ["IN_PROGRESS", "COMPLETED"] },
           scheduledAt: { lte: new Date() },
-          medicalRecord: null,
         },
-        include: { service: { select: { name: true } } },
+        include: { service: { select: { name: true } }, medicalRecord: { select: { id: true } } },
         orderBy: { scheduledAt: "desc" },
       });
-      pendingAppointments = citas.map((c) => ({
+      const resumen = (c) => ({
         id: c.id,
+        status: c.status,
         date: toDateString(c.scheduledAt),
         when: describeDateTime(c.scheduledAt),
         service: c.service ? c.service.name : "Consulta general",
         notes: c.notes,
-      }));
+        recordId: c.medicalRecord ? c.medicalRecord.id : null,
+      });
+      // Atenciones en curso (con o sin avance guardado) y consultas ya atendidas sin registrar.
+      inProgressAppointments = citas.filter((c) => c.status === "IN_PROGRESS").map(resumen);
+      pendingAppointments = citas.filter((c) => !c.medicalRecord).map(resumen);
     }
 
     const opciones = { paraVeterinario, vetProfileId: req.user.vetProfile?.id };
     return res.status(200).json({
       pet: toPetSummary(paraVeterinario ? pet : { ...pet, user: undefined }),
       records: records.map((r) => toPublicRecord(r, opciones)),
-      ...(paraVeterinario ? { pendingAppointments } : {}),
+      ...(paraVeterinario ? { pendingAppointments, inProgressAppointments } : {}),
     });
   } catch (error) {
     return serverError(res, "getPetHistory", error);
@@ -268,8 +273,8 @@ async function createRecord(req, res) {
     if (appointment.status === "CANCELLED") {
       return res.status(409).json({ message: "No se puede registrar una cita cancelada." });
     }
-    if (appointment.scheduledAt.getTime() > Date.now()) {
-      return res.status(409).json({ message: "La cita aún no ha empezado: podrás registrarla cuando comience." });
+    if (appointment.status !== "IN_PROGRESS" && appointment.status !== "COMPLETED") {
+      return res.status(409).json({ message: "Inicia la atención de la cita para registrar la consulta." });
     }
     if (appointment.medicalRecord) {
       return res.status(409).json({ message: "Esta cita ya tiene una entrada en la historia clínica." });

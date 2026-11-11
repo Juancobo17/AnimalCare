@@ -60,6 +60,8 @@ enum AppointmentStatus {
   CONFIRMED
   CANCELLED
   COMPLETED
+  // El veterinario inicio la atencion: llena la historia clinica y luego la termina.
+  IN_PROGRESS
 }
 
 model User {

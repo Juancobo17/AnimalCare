@@ -3,7 +3,7 @@
 // Veterinario: crear (AN-18), modificar (AN-20) y eliminar (AN-19) sus
 // entradas, en /pacientes/:id. ?cita=ID abre el formulario ligado a esa cita.
 import { useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import Cabecera from "../components/Cabecera";
 import Alerta from "../components/Alerta";
@@ -11,7 +11,7 @@ import Adjuntos from "../components/Adjuntos";
 import { obtenerUsuario } from "../services/auth.service";
 import { obtenerHistoria, crearEntrada, modificarEntrada, eliminarEntrada } from "../services/medicalRecord.service";
 import { ICONO_ESPECIE, calcularEdad } from "../services/pet.service";
-import { formatearFecha, hoyLocal } from "../services/appointment.service";
+import { formatearFecha, hoyLocal, completarCita } from "../services/appointment.service";
 import { obtenerMensajesDeError, esErrorDeConexion } from "../services/api";
 
 const VACIA = {
@@ -26,7 +26,10 @@ const VACIA = {
   observations: "",
 };
 
-function FormularioEntrada({ inicial, citasPendientes = [], textoBoton, onGuardar, onCancelar }) {
+// atencion: si se pasa, el formulario es el de una atencion en curso ({ recordId }) y termina con
+// "Guardar avance", "Guardar y terminar atencion" o "Terminar sin registrar".
+function FormularioEntrada({ inicial, citasPendientes = [], textoBoton, onGuardar, onCancelar, atencion = null }) {
+  const [confirmandoSin, setConfirmandoSin] = useState(false);
   const [datos, setDatos] = useState(inicial);
   const [errores, setErrores] = useState([]);
   const [guardando, setGuardando] = useState(false);
@@ -48,8 +51,19 @@ function FormularioEntrada({ inicial, citasPendientes = [], textoBoton, onGuarda
     });
   }
 
-  async function enviar(e) {
-    e.preventDefault();
+  async function omitir() {
+    setErrores([]);
+    setGuardando(true);
+    try {
+      await onGuardar(null, "sin_registrar");
+    } catch (error) {
+      setErrores(obtenerMensajesDeError(error));
+      setGuardando(false);
+    }
+  }
+
+  async function enviar(e, accion = "avance") {
+    e?.preventDefault?.();
     const mensajes = [];
     if (citasPendientes.length > 0 && !datos.appointmentId) mensajes.push("Elige la cita a la que pertenece la entrada.");
     if (datos.reason.trim() === "") mensajes.push("El motivo de consulta es obligatorio.");
@@ -61,7 +75,7 @@ function FormularioEntrada({ inicial, citasPendientes = [], textoBoton, onGuarda
     setErrores([]);
     setGuardando(true);
     try {
-      await onGuardar(datos);
+      await onGuardar(datos, accion);
     } catch (error) {
       setErrores(obtenerMensajesDeError(error));
     } finally {
@@ -134,14 +148,46 @@ function FormularioEntrada({ inicial, citasPendientes = [], textoBoton, onGuarda
         <textarea id="observations" name="observations" rows={2} maxLength={2000} value={datos.observations} onChange={cambiar} />
       </div>
 
-      <div className="acciones-linea">
-        <button type="submit" className="boton boton-primario boton-auto" disabled={guardando}>
-          {guardando ? "Guardando..." : textoBoton}
-        </button>
-        <button type="button" className="boton boton-secundario boton-auto" onClick={onCancelar} disabled={guardando}>
-          Cancelar
-        </button>
-      </div>
+      {atencion ? (
+        <div className="acciones-linea">
+          <button type="submit" className="boton boton-secundario boton-auto" disabled={guardando}>
+            {guardando ? "Guardando..." : "Guardar avance"}
+          </button>
+          <button
+            type="button"
+            className="boton boton-primario boton-auto"
+            disabled={guardando}
+            onClick={() => enviar(null, "terminar")}
+          >
+            Guardar y terminar atención
+          </button>
+          {!atencion.recordId &&
+            (confirmandoSin ? (
+              <span className="acciones-linea" role="alertdialog">
+                <strong>¿Terminar sin registrar la consulta?</strong>
+                <button type="button" className="boton boton-peligro boton-auto" disabled={guardando} onClick={omitir}>
+                  Sí, terminar sin registrar
+                </button>
+                <button type="button" className="boton boton-secundario boton-auto" onClick={() => setConfirmandoSin(false)}>
+                  No
+                </button>
+              </span>
+            ) : (
+              <button type="button" className="boton boton-peligro boton-auto" disabled={guardando} onClick={() => setConfirmandoSin(true)}>
+                Terminar sin registrar
+              </button>
+            ))}
+        </div>
+      ) : (
+        <div className="acciones-linea">
+          <button type="submit" className="boton boton-primario boton-auto" disabled={guardando}>
+            {guardando ? "Guardando..." : textoBoton}
+          </button>
+          <button type="button" className="boton boton-secundario boton-auto" onClick={onCancelar} disabled={guardando}>
+            Cancelar
+          </button>
+        </div>
+      )}
     </form>
   );
 }
@@ -265,6 +311,7 @@ function Entrada({ entrada, esVeterinario, onEditar, onEliminar, onCambio }) {
 function HistoriaClinica() {
   const { id } = useParams();
   const [parametros] = useSearchParams();
+  const navigate = useNavigate();
   const esVeterinario = obtenerUsuario()?.role === "VETERINARIAN";
 
   const [historia, setHistoria] = useState(null);
@@ -277,7 +324,9 @@ function HistoriaClinica() {
   const [mostrarAnuladas, setMostrarAnuladas] = useState(false);
 
   async function cargar() {
-    const datos = await obtenerHistoria(id);
+    const crudos = await obtenerHistoria(id);
+    // Las atenciones en curso se llenan en su propia tarjeta; aqui quedan las ya atendidas sin registrar.
+    const datos = { ...crudos, pendingAppointments: crudos.pendingAppointments?.filter((c) => c.status === "COMPLETED") };
     setHistoria(datos);
     return datos;
   }
@@ -306,6 +355,24 @@ function HistoriaClinica() {
     setExito([r.message]);
   }
 
+  // Atencion en curso: guardar avance (se sigue editando) o guardar y terminar (cierra la cita).
+  async function guardarAtencion(atencion, datos, accion) {
+    if (accion === "sin_registrar") {
+      await completarCita(atencion.id, { skipRecord: true });
+      navigate("/citas");
+      return;
+    }
+    if (atencion.recordId) await modificarEntrada(atencion.recordId, datos);
+    else await crearEntrada({ ...datos, petId: Number(id), appointmentId: atencion.id });
+    if (accion === "terminar") {
+      await completarCita(atencion.id);
+      navigate("/citas");
+      return;
+    }
+    await cargar();
+    setExito(["Avance guardado. Puedes seguir editando hasta terminar la atención."]);
+  }
+
   async function guardarEdicion(entradaId, datos) {
     const r = await modificarEntrada(entradaId, datos);
     await cargar();
@@ -324,6 +391,9 @@ function HistoriaClinica() {
   const anuladas = historia ? historia.records.filter((r) => r.status === "ANNULLED") : [];
   const citaInicial = parametros.get("cita");
   const citaElegida = historia?.pendingAppointments?.find((c) => String(c.id) === citaInicial);
+  const enCurso = historia?.inProgressAppointments || [];
+  const atencion = esVeterinario ? enCurso.find((c) => String(c.id) === citaInicial) || enCurso[0] : undefined;
+  const registroAtencion = atencion?.recordId ? historia.records.find((r) => r.id === atencion.recordId) : null;
 
   return (
     <div className="pagina">
@@ -373,13 +443,50 @@ function HistoriaClinica() {
                   Tienes {historia.pendingAppointments.length} consulta(s) con {pet.name} sin registrar en la historia.
                 </p>
               )}
-              {esVeterinario && historia.pendingAppointments?.length === 0 && (
+              {esVeterinario && historia.pendingAppointments?.length === 0 && !atencion && (
                 <p className="aviso-suave">
                   Cada entrada se registra desde una cita: podrás hacerlo en cuanto empiece la próxima consulta con{" "}
                   {pet.name}.
                 </p>
               )}
             </div>
+
+            {atencion && (
+              <div className="tarjeta">
+                <h3>Atención en curso · {atencion.service}</h3>
+                <p className="texto-suave">
+                  Llena la historia de {pet.name} mientras la atiendes. "Guardar avance" no cierra la cita; "Guardar y
+                  terminar atención" la termina y avisa al dueño.
+                </p>
+                <FormularioEntrada
+                  key={`${atencion.id}-${atencion.recordId || "nueva"}`}
+                  atencion={atencion}
+                  inicial={
+                    registroAtencion
+                      ? {
+                          ...VACIA,
+                          appointmentId: String(atencion.id),
+                          visitDate: registroAtencion.visitDate,
+                          reason: registroAtencion.reason,
+                          diagnosis: registroAtencion.diagnosis,
+                          treatment: registroAtencion.treatment || "",
+                          weight: registroAtencion.weight !== null ? String(registroAtencion.weight) : "",
+                          temperature: registroAtencion.temperature !== null ? String(registroAtencion.temperature) : "",
+                          vaccines: registroAtencion.vaccines || "",
+                          observations: registroAtencion.observations || "",
+                        }
+                      : {
+                          ...VACIA,
+                          appointmentId: String(atencion.id),
+                          reason: (atencion.notes || atencion.service || "").slice(0, 200),
+                          weight: pet.weight !== null ? String(pet.weight) : "",
+                        }
+                  }
+                  onGuardar={(datos, accion) => guardarAtencion(atencion, datos, accion)}
+                  onCancelar={() => {}}
+                />
+              </div>
+            )}
 
             {esVeterinario && formulario === "nueva" && (
               <div className="tarjeta">

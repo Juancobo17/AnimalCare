@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import UrgenciaVeterinario from "./UrgenciaVeterinario";
@@ -11,7 +11,9 @@ import {
   completarUrgencia,
   liberarUrgencia,
 } from "../services/emergency.service";
+import { iniciarCita } from "../services/appointment.service";
 
+vi.mock("../services/appointment.service", async (original) => ({ ...(await original()), iniciarCita: vi.fn() }));
 vi.mock("../services/emergency.service", async (original) => ({
   ...(await original()),
   urgenciasAbiertas: vi.fn(),
@@ -40,7 +42,10 @@ const ABIERTA = {
 function pintar() {
   return render(
     <MemoryRouter>
-      <UrgenciaVeterinario />
+      <Routes>
+        <Route path="/" element={<UrgenciaVeterinario />} />
+        <Route path="/pacientes/:id" element={<p>Pantalla de la historia clínica</p>} />
+      </Routes>
     </MemoryRouter>
   );
 }
@@ -52,6 +57,7 @@ beforeEach(() => {
   aceptarUrgencia.mockResolvedValue({ message: "Urgencia aceptada. Contacta al dueño." });
   completarUrgencia.mockResolvedValue({ message: "Urgencia marcada como atendida." });
   liberarUrgencia.mockResolvedValue({ message: "Urgencia liberada." });
+  iniciarCita.mockResolvedValue({ message: "Atención iniciada." });
 });
 
 describe("UrgenciaVeterinario", () => {
@@ -108,23 +114,68 @@ describe("UrgenciaVeterinario", () => {
   test("con una urgencia en curso muestra el contacto, la historia y no deja aceptar otra", async () => {
     urgenciasAbiertas.mockResolvedValue({ available: true, canAttend: true, requests: [{ ...ABIERTA, id: 4 }] });
     misUrgencias.mockResolvedValue({
-      active: { ...ABIERTA, id: 3, status: "ACCEPTED", acceptedAt: ahora(), expiresAt: null },
+      active: {
+        ...ABIERTA,
+        id: 3,
+        status: "ACCEPTED",
+        acceptedAt: ahora(),
+        expiresAt: null,
+        appointment: { id: 20, status: "CONFIRMED" },
+      },
       emergencies: [],
     });
     pintar();
 
     expect(await screen.findByText("Urgencia en curso")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "3001112233" })).toHaveAttribute("href", "tel:3001112233");
-    expect(screen.getByRole("link", { name: "Ver historia clínica" })).toHaveAttribute("href", "/pacientes/5");
     expect(screen.getByRole("button", { name: "Aceptar" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Marcar como atendida" })).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Marcar como atendida" }));
+    // Iniciar la atencion lleva a la historia clinica ligada a la cita de la urgencia.
+    await userEvent.click(screen.getByRole("button", { name: "Iniciar atención" }));
+    await waitFor(() => expect(iniciarCita).toHaveBeenCalledWith(20));
+    expect(await screen.findByText("Pantalla de la historia clínica")).toBeInTheDocument();
+  });
+
+  test("con la atencion iniciada ofrece continuarla y ya no permite liberar la urgencia", async () => {
+    misUrgencias.mockResolvedValue({
+      active: {
+        ...ABIERTA,
+        status: "ACCEPTED",
+        acceptedAt: ahora(),
+        expiresAt: null,
+        appointment: { id: 20, status: "IN_PROGRESS" },
+      },
+      emergencies: [],
+    });
+    pintar();
+
+    expect(await screen.findByText("En atención")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continuar atención" })).toHaveAttribute("href", "/pacientes/5?cita=20");
+    expect(screen.queryByRole("button", { name: "No puedo atenderla" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Iniciar atención" })).not.toBeInTheDocument();
+  });
+
+  test("una urgencia sin mascota no tiene historia: se termina directamente", async () => {
+    misUrgencias.mockResolvedValue({
+      active: { ...ABIERTA, pet: null, status: "ACCEPTED", acceptedAt: ahora(), expiresAt: null, appointment: { id: 20, status: "CONFIRMED" } },
+      emergencies: [],
+    });
+    pintar();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Terminar atención" }));
     await waitFor(() => expect(completarUrgencia).toHaveBeenCalledWith(3));
   });
 
   test("liberar una urgencia pide confirmacion", async () => {
     misUrgencias.mockResolvedValue({
-      active: { ...ABIERTA, status: "ACCEPTED", acceptedAt: ahora(), expiresAt: null },
+      active: {
+        ...ABIERTA,
+        status: "ACCEPTED",
+        acceptedAt: ahora(),
+        expiresAt: null,
+        appointment: { id: 20, status: "CONFIRMED" },
+      },
       emergencies: [],
     });
     pintar();

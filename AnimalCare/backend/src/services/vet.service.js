@@ -18,7 +18,7 @@ const ACTIVE_SERVICES = {
 };
 
 // Citas que ocupan la agenda. Una cita cancelada libera el horario.
-const BUSY_STATUSES = ["PENDING", "CONFIRMED"];
+const BUSY_STATUSES = ["PENDING", "CONFIRMED", "IN_PROGRESS"];
 
 // Solo los veterinarios aprobados por el administrador son publicos (AN-35).
 // Un perfil PENDING, SUSPENDED o REJECTED no aparece en el buscador, no

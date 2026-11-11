@@ -44,10 +44,10 @@ hace el sistema y cada escenario está cubierto por `backend/tests/sprint2.test.
   * **Dado que** la cita está "Pendiente" y su hora no ha pasado,
   * **Cuando** el veterinario presiona "Confirmar",
   * **Entonces** la cita pasa a "Confirmada" y el cliente recibe una notificación.
-* **Escenario 4: Marcar como atendida**
+* **Escenario 4: Iniciar y terminar la atención**
   * **Dado que** la hora de la cita ya llegó,
-  * **Cuando** el veterinario presiona "Marcar como atendida",
-  * **Entonces** la cita pasa a "Completada" y ya no se puede reprogramar ni cancelar.
+  * **Cuando** el veterinario presiona "Iniciar atención",
+  * **Entonces** la cita pasa a "En atención" (sigue ocupando la agenda, no se puede reprogramar ni cancelar) y lo lleva a la historia clínica de la mascota con esa cita elegida. La cita pasa a "Completada" solo al terminar la atención desde la historia clínica (con mascota) o con "Terminar atención" (sin mascota), y se avisa al dueño.
 * **Escenario 5: Permisos**
   * **Dado que** un cliente intenta confirmar, reprogramar o completar una cita,
   * **Cuando** envía la acción,
@@ -138,7 +138,7 @@ hace el sistema y cada escenario está cubierto por `backend/tests/sprint2.test.
   * **Entonces** el sistema le muestra esas citas y le pide confirmar; si confirma ("Aceptar y pedir que reagenden"), esas citas se cancelan y cada cliente recibe una notificación pidiéndole que reagende, porque la urgencia tiene prioridad. Si no confirma, nada cambia.
 * **Escenario 6: Cerrar o liberar**
   * **Dado que** el veterinario tiene una urgencia en curso,
-  * **Cuando** pulsa "Marcar como atendida", se cierra y el dueño es notificado; si pulsa "No puedo atenderla", la urgencia se abre de nuevo para los demás, el dueño es notificado y su agenda queda libre.
+  * **Cuando** pulsa "Iniciar atención" va a la historia clínica de la mascota con la cita de la urgencia, y al terminar ahí ("Guardar y terminar atención") la urgencia se cierra y el dueño es notificado (una urgencia sin mascota se termina con "Terminar atención"); mientras no inicie la atención puede pulsar "No puedo atenderla": la urgencia se abre de nuevo para los demás, el dueño es notificado y su agenda queda libre.
 
 ## Urgencias — criterios del dueño de mascota
 
@@ -182,9 +182,9 @@ hace el sistema y cada escenario está cubierto por `backend/tests/sprint2.test.
 La historia clínica de una mascota es la lista de sus entradas, una por consulta.
 
 * **Escenario 1: Registrar una consulta atendida**
-  * **Dado que** el veterinario atendió una cita con una mascota,
-  * **Cuando** presiona "Registrar consulta en la historia" desde su agenda, mientras la cita está en curso o después, completa motivo y diagnóstico (obligatorios) y, si aplica, tratamiento, peso, temperatura, vacunas y observaciones,
-  * **Entonces** el sistema guarda la entrada con la fecha de la cita, actualiza el peso de la mascota si lo registró y notifica al dueño.
+  * **Dado que** el veterinario inició la atención de una cita con una mascota ("En atención"),
+  * **Cuando** llena la historia en esa pantalla (o, para una consulta atendida que quedó sin registrar, usa "Registrar consulta en la historia"), con motivo y diagnóstico (obligatorios) y, si aplica, tratamiento, peso, temperatura, vacunas y observaciones,
+  * **Entonces** puede "Guardar avance" (guarda y sigue editando durante la consulta), "Guardar y terminar atención" (guarda, cierra la cita y vuelve a la agenda) o "Terminar sin registrar" (con confirmación, solo si aún no guardó nada). El sistema guarda la entrada con la fecha de la cita, actualiza el peso de la mascota si lo registró y notifica al dueño. Toda entrada pertenece a una cita.
 * **Escenario 2: Campos obligatorios y rangos**
   * **Dado que** el veterinario está creando una entrada,
   * **Cuando** deja vacío el motivo o el diagnóstico, escribe una temperatura fuera de 30–45 °C, un peso fuera de 0–200 kg o una fecha futura,

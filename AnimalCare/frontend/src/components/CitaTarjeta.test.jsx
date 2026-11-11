@@ -38,6 +38,38 @@ function pintar(cita, props = {}) {
   );
 }
 
+describe("CitaTarjeta: atencion de la cita", () => {
+  const conMascota = { ...base, status: "CONFIRMED", pet: { id: 5, name: "Michi", species: "Gato" } };
+
+  test("llegada la hora el veterinario puede iniciar la atencion, y ya no ofrece marcar como atendida", () => {
+    pintar({ ...conMascota, time: "08:00" }, { perspectiva: "veterinario" });
+    expect(screen.getByRole("button", { name: "Iniciar atención" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Marcar como atendida" })).not.toBeInTheDocument();
+  });
+
+  test("antes de la hora no se puede iniciar", () => {
+    pintar({ ...conMascota, time: "17:00" }, { perspectiva: "veterinario" });
+    expect(screen.queryByRole("button", { name: "Iniciar atención" })).not.toBeInTheDocument();
+  });
+
+  test("en atencion con mascota ofrece continuar en la historia clinica", () => {
+    pintar({ ...conMascota, status: "IN_PROGRESS", time: "08:00" }, { perspectiva: "veterinario" });
+    expect(screen.getByText("En atención")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Continuar atención" })).toHaveAttribute("href", "/pacientes/5?cita=1");
+    expect(screen.queryByRole("button", { name: "Cancelar cita" })).not.toBeInTheDocument();
+  });
+
+  test("en atencion sin mascota se termina directamente", () => {
+    pintar({ ...base, status: "IN_PROGRESS", time: "08:00" }, { perspectiva: "veterinario" });
+    expect(screen.getByRole("button", { name: "Terminar atención" })).toBeInTheDocument();
+  });
+
+  test("una consulta atendida sin registrar se puede registrar despues", () => {
+    pintar({ ...conMascota, status: "COMPLETED", time: "09:00" }, { perspectiva: "veterinario" });
+    expect(screen.getByRole("link", { name: "Registrar consulta en la historia" })).toBeInTheDocument();
+  });
+});
+
 describe("CitaTarjeta", () => {
   test("el cliente ve al veterinario, la direccion del consultorio y puede cancelar", () => {
     pintar(base);
