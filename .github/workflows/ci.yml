@@ -8,6 +8,8 @@
 # MySQL se levanta con un script (y no como "service") para poder pasarle
 # --lower-case-table-names=1: la migracion add_user_role usa la tabla `user`
 # en minuscula y la inicial la crea como `User`; Linux distingue mayusculas.
+# Node 22: el script `npm test` usa un patron con comodines (node --test "tests/**/*.test.js"),
+# que Node 20 no soporta.
 name: CI
 
 on:
@@ -36,7 +38,7 @@ jobs:
         run: bash scripts/ci-mysql.sh
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: AnimalCare/backend/package-lock.json
       - run: npm ci
@@ -64,7 +66,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: AnimalCare/frontend/package-lock.json
       - run: npm ci
@@ -82,7 +84,7 @@ jobs:
         run: bash AnimalCare/backend/scripts/ci-mysql.sh
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Backend
         working-directory: AnimalCare/backend
         run: |
