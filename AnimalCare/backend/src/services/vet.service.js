@@ -13,6 +13,11 @@ const ACTIVE_SERVICES = {
 // Citas que ocupan la agenda. Una cita cancelada libera el horario.
 const BUSY_STATUSES = ["PENDING", "CONFIRMED"];
 
+// Solo los veterinarios aprobados por el administrador son publicos (AN-35).
+// Un perfil PENDING, SUSPENDED o REJECTED no aparece en el buscador, no
+// muestra su perfil y no se puede agendar con el (AN-28 criterio 2, AN-37).
+const VISIBLE_VET = { user: { status: "ACTIVE" } };
+
 // Modalidades de atencion que existen en el sistema (AN-10 y AN-11).
 const MODOS_VALIDOS = ["HOME", "CLINIC"];
 
@@ -29,11 +34,34 @@ function validateMode(vetProfile, mode) {
 }
 
 // Lista los veterinarios disponibles, con filtros opcionales.
+// q busca a la vez por nombre del profesional, especialidad o nombre de un
+// servicio activo (AN-27). MySQL compara sin distinguir mayusculas.
 // mode permite ver solo quienes atienden a domicilio (AN-10)
 // o solo quienes atienden en veterinaria (AN-11).
-async function findVets({ specialty, mode } = {}) {
-  const where = {};
+// zone busca en la direccion del consultorio (barrio, ciudad...).
+// maxPrice deja solo a quienes tienen al menos un servicio de ese valor o menos.
+async function findVets({ q, specialty, mode, zone, maxPrice } = {}) {
+  const where = { ...VISIBLE_VET };
+  const condiciones = [];
 
+  if (q) {
+    condiciones.push({
+      OR: [
+        { user: { name: { contains: q } } },
+        { specialty: { contains: q } },
+        { services: { some: { active: true, name: { contains: q } } } },
+      ],
+    });
+  }
+  if (zone) {
+    condiciones.push({ address: { contains: zone } });
+  }
+  if (maxPrice) {
+    condiciones.push({ services: { some: { active: true, price: { lte: maxPrice } } } });
+  }
+  if (condiciones.length > 0) {
+    where.AND = condiciones;
+  }
   if (specialty) {
     where.specialty = { contains: specialty };
   }
@@ -49,19 +77,93 @@ async function findVets({ specialty, mode } = {}) {
     include: {
       user: { select: { id: true, name: true, email: true } },
       services: ACTIVE_SERVICES,
+      availabilities: true,
+      _count: { select: { reviews: true } },
     },
     orderBy: { createdAt: "asc" },
   });
 }
 
+// Citas activas y bloqueos de varios veterinarios en un rango, agrupados por
+// veterinario. Dos consultas en total, sin importar cuantos veterinarios sean.
+async function findBusyByVet(vetProfileIds, from, to) {
+  const porVet = new Map(vetProfileIds.map((id) => [id, []]));
+  if (vetProfileIds.length === 0) return porVet;
+
+  const [citas, bloqueos] = await Promise.all([
+    prisma.appointment.findMany({
+      where: {
+        vetProfileId: { in: vetProfileIds },
+        status: { in: BUSY_STATUSES },
+        scheduledAt: { gte: new Date(from.getTime() - MAX_DURATION_MINUTES * 60 * 1000), lt: to },
+      },
+      select: { vetProfileId: true, scheduledAt: true, durationMinutes: true },
+    }),
+    prisma.scheduleBlock.findMany({
+      where: { vetProfileId: { in: vetProfileIds }, startsAt: { lt: to }, endsAt: { gt: from } },
+      select: { vetProfileId: true, startsAt: true, endsAt: true },
+    }),
+  ]);
+
+  for (const cita of citas) {
+    porVet.get(cita.vetProfileId).push({
+      start: cita.scheduledAt,
+      end: new Date(cita.scheduledAt.getTime() + cita.durationMinutes * 60 * 1000),
+    });
+  }
+  for (const bloqueo of bloqueos) {
+    porVet.get(bloqueo.vetProfileId).push({ start: bloqueo.startsAt, end: bloqueo.endsAt });
+  }
+  return porVet;
+}
+
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+// Medianoche UTC de hoy.
+function todayStart(now = new Date()) {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+// Horarios libres de los proximos `dias` dias: [{ date, slots: ["09:00", ...] }].
+function slotsByDay(vetProfile, busy, { dias, durationMinutes = DEFAULT_DURATION_MINUTES, now = new Date() }) {
+  const inicio = todayStart(now);
+  const resultado = [];
+  for (let i = 0; i < dias; i += 1) {
+    const dia = new Date(inicio.getTime() + i * DIA_MS);
+    const slots = buildSlots({
+      availabilities: vetProfile.availabilities || [],
+      date: dia,
+      durationMinutes,
+      busy,
+      now,
+    });
+    resultado.push({ date: dia.toISOString().slice(0, 10), slots });
+  }
+  return resultado;
+}
+
+// Primer horario libre dentro de los proximos `dias` dias, o null.
+function firstFreeSlot(vetProfile, busy, opciones) {
+  const dias = slotsByDay(vetProfile, busy, opciones);
+  const dia = dias.find((d) => d.slots.length > 0);
+  return dia ? { date: dia.date, time: dia.slots[0] } : null;
+}
+
 // Perfil completo de un veterinario, con sus servicios y su horario semanal.
+// Devuelve null si no existe o si no esta ACTIVE: para el cliente es lo mismo.
 async function findVetById(vetProfileId) {
-  return prisma.vetProfile.findUnique({
-    where: { id: vetProfileId },
+  return prisma.vetProfile.findFirst({
+    where: { id: vetProfileId, ...VISIBLE_VET },
     include: {
       user: { select: { id: true, name: true, email: true } },
       services: ACTIVE_SERVICES,
       availabilities: { orderBy: [{ weekday: "asc" }, { startTime: "asc" }] },
+      reviews: {
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        include: { client: { select: { name: true } } },
+      },
+      _count: { select: { reviews: true } },
     },
   });
 }
@@ -89,10 +191,19 @@ async function findBusyIntervals(vetProfileId, date) {
     select: { scheduledAt: true, durationMinutes: true },
   });
 
-  return appointments.map((appointment) => ({
-    start: appointment.scheduledAt,
-    end: new Date(appointment.scheduledAt.getTime() + appointment.durationMinutes * 60 * 1000),
-  }));
+  // AN-31: los bloqueos excepcionales tambien ocupan la agenda.
+  const blocks = await prisma.scheduleBlock.findMany({
+    where: { vetProfileId, startsAt: { lt: dayEnd }, endsAt: { gt: dayStart } },
+    select: { startsAt: true, endsAt: true },
+  });
+
+  return [
+    ...appointments.map((appointment) => ({
+      start: appointment.scheduledAt,
+      end: new Date(appointment.scheduledAt.getTime() + appointment.durationMinutes * 60 * 1000),
+    })),
+    ...blocks.map((block) => ({ start: block.startsAt, end: block.endsAt })),
+  ];
 }
 
 // Horarios que el veterinario atiende ese dia segun su horario semanal,
@@ -124,7 +235,9 @@ async function findAvailableSlots(vetProfile, date, durationMinutes = DEFAULT_DU
 // Comprueba si un horario concreto sigue libre.
 // Se usa justo antes de guardar la cita, para que dos clientes no tomen
 // el mismo horario entre que se carga la pantalla y se confirma.
-async function isSlotFree(vetProfileId, start, durationMinutes) {
+// excludeAppointmentId: al reprogramar (AN-16), la cita que se mueve no
+// cuenta como ocupada.
+async function isSlotFree(vetProfileId, start, durationMinutes, excludeAppointmentId = null) {
   const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
 
   // Una cita anterior solo puede estorbar si empezo, como maximo,
@@ -138,14 +251,25 @@ async function isSlotFree(vetProfileId, start, durationMinutes) {
       vetProfileId,
       status: { in: BUSY_STATUSES },
       scheduledAt: { gte: ventanaInicio, lt: end },
+      ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {}),
     },
     select: { scheduledAt: true, durationMinutes: true },
   });
 
-  return !citas.some((cita) => {
+  const chocaConCita = citas.some((cita) => {
     const citaFin = new Date(cita.scheduledAt.getTime() + cita.durationMinutes * 60 * 1000);
     return citaFin > start;
   });
+  if (chocaConCita) {
+    return false;
+  }
+
+  // AN-31: tampoco puede caer dentro de un bloqueo.
+  const bloqueo = await prisma.scheduleBlock.findFirst({
+    where: { vetProfileId, startsAt: { lt: end }, endsAt: { gt: start } },
+    select: { id: true },
+  });
+  return !bloqueo;
 }
 
 // Formato de servicio que se envia al frontend.
@@ -174,6 +298,12 @@ function toPublicVetSummary(vetProfile) {
     clinicService: vetProfile.clinicService,
     address: vetProfile.address,
     totalServices: vetProfile.services ? vetProfile.services.length : 0,
+    reviewsCount: vetProfile._count ? vetProfile._count.reviews : undefined,
+    // Precio mas bajo de sus servicios, para mostrar "Desde $X" en el listado.
+    minPrice:
+      vetProfile.services && vetProfile.services.length > 0
+        ? Math.min(...vetProfile.services.map((service) => Number(service.price)))
+        : null,
   };
 }
 
@@ -186,6 +316,13 @@ function toPublicVetDetail(vetProfile) {
     bio: vetProfile.bio,
     phone: vetProfile.phone,
     services: (vetProfile.services || []).map(toPublicService),
+    // Ultimas resenas. Del cliente solo se muestra el primer nombre.
+    reviews: (vetProfile.reviews || []).map((review) => ({
+      rating: review.rating,
+      comment: review.comment,
+      author: review.client.name.split(" ")[0],
+      createdAt: review.createdAt,
+    })),
     availabilities: (vetProfile.availabilities || []).map((item) => ({
       weekday: item.weekday,
       startTime: item.startTime,
@@ -197,6 +334,9 @@ function toPublicVetDetail(vetProfile) {
 module.exports = {
   findVets,
   findVetById,
+  findBusyByVet,
+  slotsByDay,
+  firstFreeSlot,
   findServiceOfVet,
   findBusyIntervals,
   buildScheduleSlots,

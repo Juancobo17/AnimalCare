@@ -4,6 +4,7 @@
 // Cubre las historias AN-6 (registro de cliente), AN-7 (registro de veterinario)
 // y AN-8 (inicio de sesion).
 const authService = require("../services/auth.service");
+const { isBlocked, blockedResponse } = require("../utils/accountStatus");
 const {
   MIN_DURATION_MINUTES: MIN_SERVICE_DURATION,
   MAX_DURATION_MINUTES: MAX_SERVICE_DURATION,
@@ -307,8 +308,9 @@ async function register(req, res) {
       profile,
     });
 
+    // AN-7 escenario 8: el veterinario queda pendiente de verificacion.
     const message = rolSolicitado === "VETERINARIAN"
-      ? "El veterinario fue registrado correctamente."
+      ? "Registro exitoso. Tu perfil está en revisión para validar tu tarjeta profesional."
       : "El usuario fue registrado correctamente.";
 
     return res.status(201).json({
@@ -336,6 +338,9 @@ async function register(req, res) {
   }
 }
 
+// AN-8 escenario 4.
+const MENSAJE_CREDENCIALES = "Correo o contraseña incorrectos. Por favor, verifica tus datos.";
+
 // POST /api/auth/login
 async function login(req, res) {
   try {
@@ -362,12 +367,21 @@ async function login(req, res) {
     // Se responde lo mismo si el correo no existe o si la contrasena es incorrecta,
     // para no revelar que correos estan registrados en el sistema.
     if (!user) {
-      return res.status(401).json({ message: "Credenciales incorrectas." });
+      return res.status(401).json({ message: MENSAJE_CREDENCIALES });
     }
 
     const passwordMatches = await authService.verifyPassword(String(password), user.password);
     if (!passwordMatches) {
-      return res.status(401).json({ message: "Credenciales incorrectas." });
+      return res.status(401).json({ message: MENSAJE_CREDENCIALES });
+    }
+
+    // AN-35 / AN-37: una cuenta suspendida o rechazada no puede entrar.
+    // Se comprueba DESPUES de la contrasena para no revelar el estado de
+    // cuentas ajenas a quien no conoce la clave.
+    // Un veterinario PENDING si entra: el frontend le muestra la pantalla
+    // de verificacion en curso (AN-8 escenario 3).
+    if (isBlocked(user.status)) {
+      return blockedResponse(res, user.status);
     }
 
     const token = authService.generateToken(user);
