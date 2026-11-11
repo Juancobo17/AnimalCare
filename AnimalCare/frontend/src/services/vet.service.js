@@ -1,6 +1,7 @@
 // Consultas de veterinarios: listado, perfil detallado (AN-26)
 // y horarios disponibles (AN-13).
 import api from "./api";
+import { hoyLocal, sumarDias } from "./zona";
 
 // GET /api/vets
 // q busca por nombre del profesional, especialidad o servicio (AN-27).
@@ -93,8 +94,8 @@ export function urlDeFoto(url) {
 // "Hoy 15:00", "Mañana 09:00" o "jue 19 nov · 09:00" (fechas en UTC como la API).
 export function describirTurno(turno) {
   if (!turno) return null;
-  const hoy = new Date().toISOString().slice(0, 10);
-  const manana = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const hoy = hoyLocal();
+  const manana = sumarDias(hoy, 1);
   if (turno.date === hoy) return `Hoy ${turno.time}`;
   if (turno.date === manana) return `Mañana ${turno.time}`;
   const fecha = new Date(`${turno.date}T12:00:00Z`).toLocaleDateString("es-CO", {

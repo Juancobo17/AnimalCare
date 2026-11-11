@@ -17,6 +17,7 @@ import {
   MODALIDADES,
 } from "../services/vet.service";
 import { agendarCita, formatearFecha, HORAS_MINIMAS_CANCELACION } from "../services/appointment.service";
+import { hoyLocal, sumarDias } from "../services/zona";
 import { listarMascotas, ICONO_ESPECIE } from "../services/pet.service";
 import { obtenerMensajesDeError, esErrorDeConexion } from "../services/api";
 
@@ -37,14 +38,13 @@ const DIAS_MAXIMOS = 60;
 // Duración de una consulta sin servicio asociado.
 const DURACION_POR_DEFECTO = 30;
 
-// Fecha de hoy en formato AAAA-MM-DD. Se usa UTC porque es como trabaja la API.
+// Fechas en la zona horaria de la clinica, igual que la API.
 function hoyTexto() {
-  return new Date().toISOString().slice(0, 10);
+  return hoyLocal();
 }
 
 function fechaLimiteTexto() {
-  const limite = new Date(Date.now() + DIAS_MAXIMOS * 24 * 60 * 60 * 1000);
-  return limite.toISOString().slice(0, 10);
+  return sumarDias(hoyLocal(), DIAS_MAXIMOS);
 }
 
 function AgendarCita() {

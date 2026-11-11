@@ -1,7 +1,14 @@
 // Acceso a datos de los veterinarios: listado, perfil detallado (AN-26)
 // y calculo de horarios disponibles (AN-13).
 const prisma = require("../prisma");
-const { buildSlots, DEFAULT_DURATION_MINUTES, MAX_DURATION_MINUTES } = require("../utils/schedule");
+const {
+  buildSlots,
+  startOfDay,
+  addDays,
+  toDateString,
+  DEFAULT_DURATION_MINUTES,
+  MAX_DURATION_MINUTES,
+} = require("../utils/schedule");
 
 // Solo se muestran los servicios activos: un servicio dado de baja
 // sigue en la base por historial, pero ya no se ofrece.
@@ -117,19 +124,12 @@ async function findBusyByVet(vetProfileIds, from, to) {
   return porVet;
 }
 
-const DIA_MS = 24 * 60 * 60 * 1000;
-
-// Medianoche UTC de hoy.
-function todayStart(now = new Date()) {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}
-
 // Horarios libres de los proximos `dias` dias: [{ date, slots: ["09:00", ...] }].
 function slotsByDay(vetProfile, busy, { dias, durationMinutes = DEFAULT_DURATION_MINUTES, now = new Date() }) {
-  const inicio = todayStart(now);
+  const inicio = startOfDay(now);
   const resultado = [];
   for (let i = 0; i < dias; i += 1) {
-    const dia = new Date(inicio.getTime() + i * DIA_MS);
+    const dia = addDays(inicio, i);
     const slots = buildSlots({
       availabilities: vetProfile.availabilities || [],
       date: dia,
@@ -137,7 +137,7 @@ function slotsByDay(vetProfile, busy, { dias, durationMinutes = DEFAULT_DURATION
       busy,
       now,
     });
-    resultado.push({ date: dia.toISOString().slice(0, 10), slots });
+    resultado.push({ date: toDateString(dia), slots });
   }
   return resultado;
 }
@@ -180,7 +180,7 @@ async function findServiceOfVet(vetProfileId, serviceId) {
 // Se consulta desde la medianoche del dia hasta la del dia siguiente.
 async function findBusyIntervals(vetProfileId, date) {
   const dayStart = date;
-  const dayEnd = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+  const dayEnd = addDays(date, 1);
 
   const appointments = await prisma.appointment.findMany({
     where: {

@@ -14,7 +14,7 @@ import {
   esActiva,
   inicioDeCita,
   formatearFecha,
-  hoyUTC,
+  hoyLocal,
   sumarDias,
 } from "../services/appointment.service";
 import { obtenerMensajesDeError, esErrorDeConexion } from "../services/api";
@@ -31,7 +31,7 @@ function MisCitas() {
   const esVeterinario = usuario?.role === "VETERINARIAN";
 
   // Veterinario: dia consultado ("" = todas las proximas).
-  const [dia, setDia] = useState(hoyUTC());
+  const [dia, setDia] = useState(hoyLocal());
   const [filtro, setFiltro] = useState("ACTIVAS");
   // Cliente: "proximas" o "historial".
   const [pestana, setPestana] = useState("proximas");
@@ -122,7 +122,7 @@ function MisCitas() {
                   type="button"
                   className="boton boton-secundario boton-auto"
                   aria-label="Día anterior"
-                  onClick={() => setDia(sumarDias(dia || hoyUTC(), -1))}
+                  onClick={() => setDia(sumarDias(dia || hoyLocal(), -1))}
                 >
                   ‹
                 </button>
@@ -136,11 +136,11 @@ function MisCitas() {
                   type="button"
                   className="boton boton-secundario boton-auto"
                   aria-label="Día siguiente"
-                  onClick={() => setDia(sumarDias(dia || hoyUTC(), 1))}
+                  onClick={() => setDia(sumarDias(dia || hoyLocal(), 1))}
                 >
                   ›
                 </button>
-                <button type="button" className="boton boton-secundario boton-auto" onClick={() => setDia(hoyUTC())}>
+                <button type="button" className="boton boton-secundario boton-auto" onClick={() => setDia(hoyLocal())}>
                   Hoy
                 </button>
                 <button

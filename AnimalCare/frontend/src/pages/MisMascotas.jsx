@@ -13,7 +13,7 @@ import {
   ICONO_ESPECIE,
   calcularEdad,
 } from "../services/pet.service";
-import { hoyUTC } from "../services/appointment.service";
+import { hoyLocal } from "../services/appointment.service";
 import { obtenerMensajesDeError, esErrorDeConexion } from "../services/api";
 
 const VACIA = { name: "", species: "Perro", sex: "Macho", birthDate: "", weight: "" };
@@ -87,7 +87,7 @@ function FormularioMascota({ inicial, textoBoton, onGuardar, onCancelar }) {
           <label htmlFor={id("nacimiento")}>
             Nacimiento <span className="obligatorio">*</span>
           </label>
-          <input id={id("nacimiento")} type="date" name="birthDate" max={hoyUTC()} value={datos.birthDate} onChange={cambiar} />
+          <input id={id("nacimiento")} type="date" name="birthDate" max={hoyLocal()} value={datos.birthDate} onChange={cambiar} />
         </div>
         <div className="campo">
           <label htmlFor={id("peso")}>Peso (kg)</label>

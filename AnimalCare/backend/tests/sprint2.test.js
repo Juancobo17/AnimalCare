@@ -22,6 +22,7 @@ const bcrypt = require("bcrypt");
 const prisma = require("../src/prisma");
 const uploads = require("../src/utils/uploads");
 const { runReminders } = require("../src/services/reminder.service");
+const { toDateString } = require("../src/utils/schedule");
 
 const API = process.env.API_URL || `http://localhost:${process.env.PORT || 4000}/api`;
 const RUN = `${Date.now()}`.slice(-7);
@@ -994,7 +995,7 @@ describe("Mejora: buscador con filtros, orden y proximo turno", () => {
   });
 
   test("'atiende hoy' solo deja a quienes tienen turno hoy", async () => {
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = toDateString(new Date());
     const r = await http("GET", "/vets?today=true", { token: ctx.clienteB });
     assert.ok(r.data.vets.every((v) => v.nextSlot && v.nextSlot.date === hoy));
   });

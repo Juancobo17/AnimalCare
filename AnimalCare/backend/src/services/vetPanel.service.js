@@ -1,7 +1,7 @@
 // Acceso a datos del panel del veterinario:
 // sus servicios (AN-28, AN-29, AN-30), su horario base y sus bloqueos (AN-31).
 const prisma = require("../prisma");
-const { MAX_DURATION_MINUTES, toDateString, toTimeOfDay, describeDateTime } = require("../utils/schedule");
+const { MAX_DURATION_MINUTES, toDateString, toTimeOfDay, describeDateTime, startOfDay, addDays } = require("../utils/schedule");
 const notificationService = require("./notification.service");
 const { BUSY_STATUSES } = require("./vet.service");
 
@@ -142,8 +142,9 @@ function toPublicBlock(block) {
     startTime: toTimeOfDay(block.startsAt),
     // Un bloqueo de dia completo termina a las 00:00 del dia siguiente.
     endTime: toTimeOfDay(block.endsAt) === "00:00" ? "24:00" : toTimeOfDay(block.endsAt),
-    allDay: block.endsAt.getTime() - block.startsAt.getTime() === 24 * 60 * 60 * 1000
-      && toTimeOfDay(block.startsAt) === "00:00",
+    allDay:
+      toTimeOfDay(block.startsAt) === "00:00" &&
+      block.endsAt.getTime() === addDays(startOfDay(block.startsAt), 1).getTime(),
     reason: block.reason,
   };
 }
