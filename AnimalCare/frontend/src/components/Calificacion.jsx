@@ -1,5 +1,6 @@
 // Calificacion promedio del veterinario (0 a 5). null = aun sin calificaciones.
-function Calificacion({ valor }) {
+// total (opcional) es la cantidad de opiniones.
+function Calificacion({ valor, total }) {
   if (valor === null || valor === undefined) {
     return <span className="calificacion calificacion-vacia">Sin calificaciones aún</span>;
   }
@@ -13,7 +14,10 @@ function Calificacion({ valor }) {
         {"☆".repeat(5 - redondeada)}
       </span>
       <strong>{valor.toFixed(1)}</strong>
-      <span className="texto-suave"> / 5</span>
+      <span className="texto-suave">
+        {" "}
+        / 5{total ? ` · ${total} ${total === 1 ? "opinión" : "opiniones"}` : ""}
+      </span>
     </span>
   );
 }

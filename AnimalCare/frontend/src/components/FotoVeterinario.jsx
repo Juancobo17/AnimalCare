@@ -1,6 +1,8 @@
 // Foto de perfil del veterinario. Si no tiene foto (o no carga), muestra sus iniciales.
 import { useState } from "react";
 
+import { urlDeFoto } from "../services/vet.service";
+
 function obtenerIniciales(nombre = "") {
   const palabras = nombre
     .replace(/^(dr|dra)\.?\s+/i, "")
@@ -21,7 +23,7 @@ function FotoVeterinario({ nombre, url, tamano = 64 }) {
       <img
         className="foto-vet"
         style={estilo}
-        src={url}
+        src={urlDeFoto(url)}
         alt={`Foto de ${nombre}`}
         onError={() => setFallo(true)}
       />

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import AuthLayout from "../components/AuthLayout";
 import Alerta from "../components/Alerta";
-import { iniciarSesion } from "../services/auth.service";
+import { iniciarSesion, tomarAvisoDeSesion } from "../services/auth.service";
 import { obtenerMensajesDeError } from "../services/api";
 
 function Login() {
@@ -12,7 +12,11 @@ function Login() {
   const mensajeInicial = useLocation().state?.mensaje;
 
   const [datos, setDatos] = useState({ email: "", password: "" });
-  const [errores, setErrores] = useState([]);
+  // Si la sesion se cerro porque la cuenta fue suspendida, se muestra el motivo.
+  const [errores, setErrores] = useState(() => {
+    const aviso = tomarAvisoDeSesion();
+    return aviso ? [aviso] : [];
+  });
   const [enviando, setEnviando] = useState(false);
 
   function manejarCambio(evento) {

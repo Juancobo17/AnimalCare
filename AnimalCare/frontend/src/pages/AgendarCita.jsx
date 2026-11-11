@@ -9,9 +9,27 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import Cabecera from "../components/Cabecera";
 import Alerta from "../components/Alerta";
-import { obtenerVeterinario, obtenerHorarios, MODALIDADES } from "../services/vet.service";
-import { agendarCita, formatearFecha } from "../services/appointment.service";
+import {
+  obtenerVeterinario,
+  obtenerHorarios,
+  obtenerDiasDisponibles,
+  formatearPrecio,
+  MODALIDADES,
+} from "../services/vet.service";
+import { agendarCita, formatearFecha, HORAS_MINIMAS_CANCELACION } from "../services/appointment.service";
+import { listarMascotas, ICONO_ESPECIE } from "../services/pet.service";
 import { obtenerMensajesDeError, esErrorDeConexion } from "../services/api";
+
+// "jue", "19", "nov" para los botones de día.
+function partesDelDia(fecha) {
+  const valor = new Date(`${fecha}T12:00:00Z`);
+  const opciones = { timeZone: "UTC" };
+  return {
+    semana: valor.toLocaleDateString("es-CO", { ...opciones, weekday: "short" }).replace(".", ""),
+    dia: valor.getUTCDate(),
+    mes: valor.toLocaleDateString("es-CO", { ...opciones, month: "short" }).replace(".", ""),
+  };
+}
 
 // Debe coincidir con MAX_SCHEDULE_DAYS del backend.
 const DIAS_MAXIMOS = 60;
@@ -43,6 +61,13 @@ function AgendarCita() {
   const [hora, setHora] = useState("");
   const [direccion, setDireccion] = useState("");
   const [notas, setNotas] = useState("");
+  const [mascotaId, setMascotaId] = useState("");
+
+  // Mascotas del cliente (null mientras cargan)
+  const [mascotas, setMascotas] = useState(null);
+  // Proximos 14 dias con su cantidad de turnos libres
+  const [dias, setDias] = useState([]);
+  const [otraFecha, setOtraFecha] = useState(false);
 
   // Horarios libres del día elegido
   const [horarios, setHorarios] = useState([]);
@@ -80,6 +105,32 @@ function AgendarCita() {
 
     cargar();
   }, [id, intento]);
+
+  // Mascotas del cliente: si tiene una sola, queda elegida.
+  useEffect(() => {
+    listarMascotas()
+      .then((datos) => {
+        setMascotas(datos.pets);
+        if (datos.pets.length === 1) setMascotaId(String(datos.pets[0].id));
+      })
+      .catch(() => setMascotas([]));
+  }, []);
+
+  // Dias con turnos libres para la modalidad y el servicio elegidos.
+  useEffect(() => {
+    if (!modalidad) return undefined;
+    let cancelado = false;
+    obtenerDiasDisponibles(id, { mode: modalidad, serviceId: servicioId || undefined })
+      .then((resultado) => {
+        if (!cancelado) setDias(resultado);
+      })
+      .catch(() => {
+        if (!cancelado) setDias([]);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [id, modalidad, servicioId, intento]);
 
   const servicioElegido = useMemo(
     () => veterinario?.services.find((servicio) => String(servicio.id) === servicioId) || null,
@@ -141,6 +192,9 @@ function AgendarCita() {
   function validar() {
     const mensajes = [];
 
+    if (mascotas && mascotas.length > 0 && !mascotaId) {
+      mensajes.push("Elige la mascota que vas a llevar.");
+    }
     if (!modalidad) {
       mensajes.push("Elige la modalidad de atención.");
     }
@@ -175,6 +229,7 @@ function AgendarCita() {
       await agendarCita({
         vetProfileId: Number(id),
         serviceId: servicioId ? Number(servicioId) : null,
+        petId: mascotaId ? Number(mascotaId) : null,
         mode: modalidad,
         date: fecha,
         time: horaElegida,
@@ -229,6 +284,29 @@ function AgendarCita() {
             <Alerta tipo="error" mensajes={errores} onReintentar={sinConexion ? () => setIntento((n) => n + 1) : undefined} />
 
             <form onSubmit={manejarEnvio} noValidate>
+              {/* Paso 0: mascota */}
+              {mascotas && mascotas.length > 0 && (
+                <div className="campo">
+                  <label htmlFor="mascota">
+                    Mascota <span className="obligatorio">*</span>
+                  </label>
+                  <select id="mascota" value={mascotaId} onChange={(e) => setMascotaId(e.target.value)}>
+                    <option value="">Elige a quién llevas</option>
+                    {mascotas.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {ICONO_ESPECIE[m.species] || "🐾"} {m.name} ({m.species})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {mascotas && mascotas.length === 0 && (
+                <p className="aviso-suave">
+                  ¿Aún no registras a tu mascota? <Link to="/mascotas">Regístrala aquí</Link> para que el
+                  veterinario conozca su especie, edad y peso. También puedes agendar sin hacerlo.
+                </p>
+              )}
+
               {/* Paso 1: servicio */}
               <div className="campo">
                 <label htmlFor="servicio">Servicio</label>
@@ -240,7 +318,7 @@ function AgendarCita() {
                   <option value="">Consulta general ({DURACION_POR_DEFECTO} min)</option>
                   {veterinario.services.map((servicio) => (
                     <option key={servicio.id} value={servicio.id}>
-                      {servicio.name} ({servicio.durationMinutes} min)
+                      {servicio.name} · {servicio.durationMinutes} min · {formatearPrecio(servicio.price)}
                     </option>
                   ))}
                 </select>
@@ -305,14 +383,52 @@ function AgendarCita() {
                 <label htmlFor="fecha">
                   Fecha <span className="obligatorio">*</span>
                 </label>
-                <input
-                  id="fecha"
-                  type="date"
-                  value={fecha}
-                  min={hoyTexto()}
-                  max={fechaLimiteTexto()}
-                  onChange={(evento) => setFecha(evento.target.value)}
-                />
+
+                {!modalidad && <p className="texto-suave">Elige primero la modalidad de atención.</p>}
+
+                {/* Proximos 14 dias: solo se pueden elegir los que tienen turnos */}
+                {modalidad && dias.length > 0 && (
+                  <div className="dias" role="group" aria-label="Próximos días">
+                    {dias.map((d) => {
+                      const p = partesDelDia(d.date);
+                      return (
+                        <button
+                          key={d.date}
+                          type="button"
+                          className={`dia-opcion ${fecha === d.date ? "activo" : ""}`}
+                          disabled={d.available === 0}
+                          aria-pressed={fecha === d.date}
+                          aria-label={`${formatearFecha(d.date)}: ${d.available} turnos libres`}
+                          onClick={() => {
+                            setOtraFecha(false);
+                            setFecha(d.date);
+                          }}
+                        >
+                          <span className="dia-semana">{p.semana}</span>
+                          <span className="dia-numero">{p.dia}</span>
+                          <span className="dia-mes">{p.mes}</span>
+                          <span className="dia-turnos">{d.available === 0 ? "—" : `${d.available} libres`}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {modalidad && (
+                  <button type="button" className="enlace-accion" onClick={() => setOtraFecha((v) => !v)}>
+                    {otraFecha ? "Ocultar calendario" : "Buscar otra fecha (hasta 60 días)"}
+                  </button>
+                )}
+                {modalidad && otraFecha && (
+                  <input
+                    id="fecha"
+                    type="date"
+                    value={fecha}
+                    min={hoyTexto()}
+                    max={fechaLimiteTexto()}
+                    onChange={(evento) => setFecha(evento.target.value)}
+                  />
+                )}
                 <span className="ayuda">Puedes agendar hasta {DIAS_MAXIMOS} días adelante.</span>
               </div>
 
@@ -371,11 +487,26 @@ function AgendarCita() {
                     {servicioElegido ? servicioElegido.name : "Consulta general"} · {duracion} min ·{" "}
                     {MODALIDADES[modalidad]}
                   </p>
+                  <p>
+                    {servicioElegido
+                      ? `Valor: ${formatearPrecio(servicioElegido.price)}`
+                      : "Valor: lo acuerdas con el veterinario en la consulta"}
+                  </p>
                   <p className="texto-suave">
                     {formatearFecha(fecha)} a las {horaElegida}
                   </p>
+                  {mascotaId && mascotas && (
+                    <p className="texto-suave">
+                      Mascota: {mascotas.find((m) => String(m.id) === mascotaId)?.name}
+                    </p>
+                  )}
                 </div>
               )}
+
+              <p className="ayuda politica">
+                Política de cancelación: puedes cancelar sin costo hasta {HORAS_MINIMAS_CANCELACION} horas
+                antes de la cita desde "Mis citas". Después, comunícate con el veterinario.
+              </p>
 
               <button
                 type="submit"
