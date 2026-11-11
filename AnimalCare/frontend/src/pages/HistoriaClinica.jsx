@@ -164,7 +164,11 @@ function FormularioEntrada({ inicial, citasPendientes = [], textoBoton, onGuarda
           {!atencion.recordId &&
             (confirmandoSin ? (
               <span className="acciones-linea" role="alertdialog">
-                <strong>¿Terminar sin registrar la consulta?</strong>
+                <strong>
+                  {atencion.emergency
+                    ? "¿No realizaste la urgencia? Volverá a quedar disponible para otros veterinarios."
+                    : "¿Terminar sin registrar la consulta?"}
+                </strong>
                 <button type="button" className="boton boton-peligro boton-auto" disabled={guardando} onClick={omitir}>
                   Sí, terminar sin registrar
                 </button>
@@ -359,7 +363,8 @@ function HistoriaClinica() {
   async function guardarAtencion(atencion, datos, accion) {
     if (accion === "sin_registrar") {
       await completarCita(atencion.id, { skipRecord: true });
-      navigate("/citas");
+      // Una urgencia que no se realizo vuelve a quedar disponible: se regresa a Urgencias.
+      navigate(atencion.emergency ? "/urgencias" : "/citas");
       return;
     }
     if (atencion.recordId) await modificarEntrada(atencion.recordId, datos);

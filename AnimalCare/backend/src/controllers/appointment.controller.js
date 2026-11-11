@@ -10,6 +10,7 @@ const appointmentService = require("../services/appointment.service");
 const vetService = require("../services/vet.service");
 const notificationService = require("../services/notification.service");
 const { findOwnActivePet } = require("./pet.controller");
+const { reabrirUrgencia } = require("./emergency.controller");
 const prisma = require("../prisma");
 const { parseId } = require("../utils/params");
 const {
@@ -567,6 +568,23 @@ async function completeAppointment(req, res) {
         message: "Registra la consulta en la historia clínica antes de terminar, o termina sin registrar.",
         code: "RECORD_REQUIRED",
       });
+    }
+
+    // "Terminar sin registrar" una urgencia: el veterinario no la realizo, asi que vuelve a
+    // quedar disponible para otros (y su agenda se libera).
+    if (req.body?.skipRecord === true && !appointment.medicalRecord) {
+      const urgenciaAbierta = await prisma.emergencyRequest.findFirst({
+        where: { appointmentId: appointment.id, status: "ACCEPTED" },
+      });
+      if (urgenciaAbierta) {
+        if (!(await reabrirUrgencia(urgenciaAbierta, req.user))) {
+          return res.status(409).json({ message: "La urgencia cambió de estado. Actualiza la página." });
+        }
+        return res.status(200).json({
+          message: "La urgencia volvió a quedar disponible para otros veterinarios.",
+          reopened: true,
+        });
+      }
     }
 
     const completada = await appointmentService.updateIfStatus(appointment.id, ["IN_PROGRESS"], {

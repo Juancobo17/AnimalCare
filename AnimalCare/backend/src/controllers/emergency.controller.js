@@ -175,7 +175,7 @@ async function availability(req, res) {
   }
 }
 
-// POST /api/emergencies  { petId?, symptoms, mode, address?, phone }
+// POST /api/emergencies  { petId, symptoms, mode, address?, phone }
 async function createEmergency(req, res) {
   try {
     const body = req.body || {};
@@ -193,12 +193,14 @@ async function createEmergency(req, res) {
     if (!/^[0-9+\s-]{7,15}$/.test(telefono)) errors.push("Escribe un teléfono de contacto válido.");
     if (errors.length > 0) return badRequest(res, errors);
 
+    // La mascota es obligatoria: la urgencia se atiende como una cita y se registra en su historia clinica.
     let pet = null;
-    if (body.petId !== undefined && body.petId !== null && String(body.petId).trim() !== "") {
-      const petId = parseId(body.petId);
-      pet = petId ? await findOwnActivePet(petId, req.user.id) : null;
-      if (!pet) return res.status(404).json({ message: "La mascota no existe o no es tuya." });
+    if (body.petId === undefined || body.petId === null || String(body.petId).trim() === "") {
+      return badRequest(res, ["Elige la mascota que necesita la atención urgente."]);
     }
+    const petId = parseId(body.petId);
+    pet = petId ? await findOwnActivePet(petId, req.user.id) : null;
+    if (!pet) return res.status(404).json({ message: "La mascota no existe o no es tuya." });
 
     await expireOld();
 
@@ -518,6 +520,29 @@ async function completeEmergency(req, res) {
   }
 }
 
+// El veterinario no atendio la urgencia: vuelve a quedar disponible para los demas, se libera
+// su agenda y se avisa al dueño y a los veterinarios disponibles. Devuelve false si ya cambio.
+// Se reinicia el plazo: el caso sigue abierto aunque haya pasado un rato desde que se pidio.
+async function reabrirUrgencia(urgencia, vetUser) {
+  const r = await prisma.emergencyRequest.updateMany({
+    where: { id: urgencia.id, vetProfileId: vetUser.vetProfile.id, status: "ACCEPTED" },
+    data: { status: "OPEN", vetProfileId: null, acceptedAt: null, appointmentId: null, createdAt: new Date() },
+  });
+  if (r.count === 0) return false;
+
+  await cerrarCita(urgencia.appointmentId, "CANCELLED"); // la agenda queda libre
+  await notificationService.notify(
+    urgencia.clientId,
+    `${vetUser.name} no puede atender tu urgencia. La abrimos de nuevo para los demás veterinarios disponibles.`
+  );
+  const otros = await vetsDisponibles(urgencia.mode, { excluir: vetUser.vetProfile.id });
+  await notificationService.notifyMany(
+    otros.map((v) => v.userId),
+    `URGENCIA ${urgencia.mode === "HOME" ? "a domicilio" : "en la veterinaria"} de nuevo disponible: ${resumen(urgencia.symptoms)}.`
+  );
+  return true;
+}
+
 // PATCH /api/emergencies/:id/release
 // El veterinario no puede atenderla: vuelve a abrirse para los demas.
 async function releaseEmergency(req, res) {
@@ -528,23 +553,9 @@ async function releaseEmergency(req, res) {
       return res.status(409).json({ message: "Ya iniciaste la atención: termínala desde la historia clínica." });
     }
 
-    const r = await prisma.emergencyRequest.updateMany({
-      where: { id: urgencia.id, vetProfileId: req.user.vetProfile.id, status: "ACCEPTED" },
-      data: { status: "OPEN", vetProfileId: null, acceptedAt: null, appointmentId: null },
-    });
-    if (r.count === 0) return res.status(409).json({ message: "La urgencia cambió de estado. Actualiza la página." });
-
-    await cerrarCita(urgencia.appointmentId, "CANCELLED"); // la agenda queda libre
-
-    await notificationService.notify(
-      urgencia.clientId,
-      `${req.user.name} no puede atender tu urgencia. La abrimos de nuevo para los demás veterinarios de turno.`
-    );
-    const otros = await vetsDisponibles(urgencia.mode, { excluir: req.user.vetProfile.id });
-    await notificationService.notifyMany(
-      otros.map((v) => v.userId),
-      `URGENCIA ${urgencia.mode === "HOME" ? "a domicilio" : "en la veterinaria"} de nuevo disponible: ${resumen(urgencia.symptoms)}.`
-    );
+    if (!(await reabrirUrgencia(urgencia, req.user))) {
+      return res.status(409).json({ message: "La urgencia cambió de estado. Actualiza la página." });
+    }
     return res.status(200).json({ message: "Urgencia liberada. Otro veterinario podrá tomarla." });
   } catch (error) {
     return serverError(res, "releaseEmergency", error);
@@ -560,6 +571,7 @@ module.exports = {
   acceptEmergency,
   completeEmergency,
   releaseEmergency,
+  reabrirUrgencia,
   TTL_MIN,
   URGENCY_MINUTES,
 };

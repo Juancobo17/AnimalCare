@@ -117,7 +117,7 @@ la reciben. No hay "turnos" aparte: la disponibilidad sale de **Mi horario**.
 
 1. **Quien recibe urgencias:** un veterinario con la cuenta aprobada, cuyo horario semanal cubre los proximos
    30 minutos, sin un bloqueo de agenda y sin otra urgencia en curso. Las citas normales no lo impiden (ver 3).
-2. **El dueño describe la urgencia:** sintomas (10 a 500 caracteres), mascota (opcional), telefono y si la
+2. **El dueño describe la urgencia:** sintomas (10 a 500 caracteres), mascota (obligatoria: la urgencia se atiende como una cita y se registra en su historia), telefono y si la
    atencion es en la veterinaria o a domicilio (con direccion). Solo puede tener **una urgencia en curso**.
 3. **Se avisa a los veterinarios disponibles compatibles** con la modalidad (una urgencia a domicilio solo llega
    a quienes atienden a domicilio). El primero que la acepta se queda con ella: la toma es atomica, si dos la
@@ -434,7 +434,7 @@ maquina.
 | PATCH  | /api/notifications/:id/read | Si   | Cualquiera | Marca una notificacion como leida              |
 | PATCH  | /api/notifications/read-all | Si   | Cualquiera | Marca todas como leidas (AN-22, AN-23)         |
 | GET    | /api/emergencies/availability | Si | CLIENT   | Cuantos veterinarios atienden ahora segun su horario (`available`, `home`, `clinic`) |
-| POST   | /api/emergencies         | Si      | CLIENT   | Pide una urgencia `{ symptoms, mode, phone, address?, petId? }` (409 si ya tiene una en curso o no hay veterinarios atendiendo) |
+| POST   | /api/emergencies         | Si      | CLIENT   | Pide una urgencia `{ petId, symptoms, mode, phone, address? }` (409 si ya tiene una en curso o no hay veterinarios atendiendo) |
 | PATCH  | /api/emergencies/:id/cancel | Si   | CLIENT   | Cancela su urgencia (abierta o aceptada)         |
 | GET    | /api/emergencies/mine    | Si      | CLIENT, VETERINARIAN | Sus urgencias; `active` es la que esta en curso |
 | GET    | /api/emergencies/open    | Si      | VETERINARIAN | Urgencias abiertas compatibles (solo si esta dentro de su horario) `{ available, canAttend, requests }` |
