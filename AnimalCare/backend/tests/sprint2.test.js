@@ -102,7 +102,7 @@ function registroVeterinario(email, license, name = NOMBRE_VET) {
 before(async () => {
   // Si el cliente de Prisma no conoce las tablas del Sprint 2, la limpieza
   // final no podria borrar lo que se cree: se detiene antes de empezar.
-  if (!prisma.notification || !prisma.scheduleBlock || !prisma.review || !prisma.medicalRecord) {
+  if (!prisma.notification || !prisma.scheduleBlock || !prisma.review || !prisma.medicalRecord || !prisma.medicalAttachment) {
     throw new Error("El cliente de Prisma está desactualizado. Ejecuta `npx prisma generate` y reinicia el backend.");
   }
 
@@ -156,6 +156,11 @@ after(async () => {
 
   await prisma.notification.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.authToken.deleteMany({ where: { userId: { in: userIds } } });
+  const adjuntos = await prisma.medicalAttachment.findMany({
+    where: { record: { OR: [{ pet: { userId: { in: userIds } } }, { vetProfileId: { in: vetIds } }] } },
+  });
+  for (const adjunto of adjuntos) await uploads.deleteRecordFile(adjunto.storedName);
+  await prisma.medicalAttachment.deleteMany({ where: { id: { in: adjuntos.map((a) => a.id) } } });
   await prisma.medicalRecord.deleteMany({
     where: { OR: [{ pet: { userId: { in: userIds } } }, { vetProfileId: { in: vetIds } }] },
   });
@@ -1160,6 +1165,141 @@ describe("AN-19: eliminar historia clinica", () => {
       body: { reason: "x" },
     });
     assert.equal(otraVez.status, 409);
+  });
+});
+
+describe("Adjuntos de la historia clinica (extiende AN-18 y AN-21)", () => {
+  // PDF minimo valido para la firma (%PDF), con un marcador para reconocerlo.
+  const pdfDe = (marca) => `data:application/pdf;base64,${Buffer.from(`%PDF-1.4\n%${marca}\n%%EOF`).toString("base64")}`;
+  const bajar = (token, id) => fetch(`${API}/medical-records/attachments/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+
+  test("un cliente no puede adjuntar archivos", async () => {
+    const r = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: ctx.clienteA,
+      body: { file: pdfDe("x"), name: "examen.pdf" },
+    });
+    assert.equal(r.status, 403);
+  });
+
+  test("rechaza formatos no permitidos, archivos falsos y archivos muy grandes", async () => {
+    const gif = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: ctx.vet,
+      body: { file: "data:image/gif;base64,R0lGODlhAQABAAAAACw=" },
+    });
+    assert.equal(gif.status, 400);
+
+    const falso = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: ctx.vet,
+      body: { file: `data:application/pdf;base64,${Buffer.from("esto no es un pdf").toString("base64")}` },
+    });
+    assert.equal(falso.status, 400);
+
+    const grande = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(5 * 1024 * 1024)]);
+    const r = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: ctx.vet,
+      body: { file: `data:application/pdf;base64,${grande.toString("base64")}` },
+    });
+    assert.equal(r.status, 400);
+    assert.match(errores(r), /no puede pesar más de 5 MB/);
+  });
+
+  test("el veterinario adjunta un PDF y una imagen; el nombre se limpia", async () => {
+    const pdf = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: ctx.vet,
+      body: { file: pdfDe("hemograma"), name: "../../Hemograma Michi.pdf" },
+    });
+    assert.equal(pdf.status, 201, errores(pdf));
+    assert.equal(pdf.data.attachment.name, "Hemograma Michi.pdf");
+    assert.equal(pdf.data.attachment.type, "application/pdf");
+    ctx.adjuntoPdf = pdf.data.attachment.id;
+
+    const img = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: ctx.vet,
+      body: { file: PNG_1X1, name: "radiografia.png" },
+    });
+    assert.equal(img.status, 201, errores(img));
+    ctx.adjuntoImg = img.data.attachment.id;
+  });
+
+  test("la historia lista los adjuntos sin exponer rutas de disco, al dueño y al veterinario", async () => {
+    for (const token of [ctx.clienteA, ctx.vet]) {
+      const r = await http("GET", `/medical-records/pets/${ctx.mascota}`, { token });
+      const entrada = r.data.records.find((e) => e.id === ctx.entrada);
+      assert.deepEqual(
+        entrada.attachments.map((a) => [a.name, a.type]),
+        [["Hemograma Michi.pdf", "application/pdf"], ["radiografia.png", "image/png"]]
+      );
+      assert.ok(entrada.attachments.every((a) => a.size > 0 && !("storedName" in a)));
+    }
+  });
+
+  test("el dueño descarga el archivo; otros no", async () => {
+    const dueño = await bajar(ctx.clienteA, ctx.adjuntoPdf);
+    assert.equal(dueño.status, 200);
+    assert.equal(dueño.headers.get("content-type"), "application/pdf");
+    assert.match(dueño.headers.get("cache-control"), /no-store/);
+    assert.match(Buffer.from(await dueño.arrayBuffer()).toString(), /%hemograma/);
+
+    assert.equal((await bajar(ctx.vet, ctx.adjuntoImg)).status, 200);
+    assert.equal((await bajar(ctx.clienteB, ctx.adjuntoPdf)).status, 404, "otro cliente");
+    assert.equal((await bajar(ctx.admin, ctx.adjuntoPdf)).status, 403, "el administrador no accede a historias");
+    assert.equal((await fetch(`${API}/medical-records/attachments/${ctx.adjuntoPdf}`)).status, 401, "sin sesion");
+    assert.equal((await fetch(API.replace(/\/api$/, "") + "/uploads/records/cualquiera.pdf")).status, 404, "no hay ruta publica");
+  });
+
+  test("otro veterinario ve el archivo pero no puede agregar ni quitar", async () => {
+    const vet2 = await tokenDe(ctx.emails.vet2);
+    assert.equal((await bajar(vet2, ctx.adjuntoPdf)).status, 200);
+    const agregar = await http("POST", `/medical-records/${ctx.entrada}/attachments`, {
+      token: vet2,
+      body: { file: pdfDe("intruso") },
+    });
+    assert.equal(agregar.status, 403);
+    const quitar = await http("DELETE", `/medical-records/attachments/${ctx.adjuntoPdf}`, { token: vet2 });
+    assert.equal(quitar.status, 403);
+  });
+
+  test("una entrada admite hasta 10 archivos", async () => {
+    const actuales = (await http("GET", `/medical-records/pets/${ctx.mascota}`, { token: ctx.vet })).data.records.find(
+      (e) => e.id === ctx.entrada
+    ).attachments.length;
+    for (let i = actuales; i < 10; i += 1) {
+      const r = await http("POST", `/medical-records/${ctx.entrada}/attachments`, { token: ctx.vet, body: { file: pdfDe(`n${i}`) } });
+      assert.equal(r.status, 201, errores(r));
+    }
+    const once = await http("POST", `/medical-records/${ctx.entrada}/attachments`, { token: ctx.vet, body: { file: pdfDe("once") } });
+    assert.equal(once.status, 409);
+  });
+
+  test("el autor elimina un archivo: desaparece de la lista y del disco", async () => {
+    const fila = await prisma.medicalAttachment.findUnique({ where: { id: ctx.adjuntoImg } });
+    const ruta = require("../src/utils/uploads").recordFileAbsolutePath(fila.storedName);
+    assert.ok(require("node:fs").existsSync(ruta), "el archivo existe antes de eliminar");
+
+    assert.equal((await http("DELETE", `/medical-records/attachments/${ctx.adjuntoImg}`, { token: ctx.clienteA })).status, 403);
+    const r = await http("DELETE", `/medical-records/attachments/${ctx.adjuntoImg}`, { token: ctx.vet });
+    assert.equal(r.status, 200, errores(r));
+    assert.ok(!require("node:fs").existsSync(ruta), "el archivo ya no esta en disco");
+    assert.equal((await bajar(ctx.clienteA, ctx.adjuntoImg)).status, 404);
+  });
+
+  test("al eliminar la entrada, el dueño deja de ver sus archivos y no se pueden agregar mas", async () => {
+    const nueva = await http("POST", "/medical-records", {
+      token: ctx.vet,
+      body: { petId: ctx.mascota, reason: "Control con examenes", diagnosis: "En revision" },
+    });
+    assert.equal(nueva.status, 201, errores(nueva));
+    const adj = await http("POST", `/medical-records/${nueva.data.record.id}/attachments`, {
+      token: ctx.vet,
+      body: { file: pdfDe("anulada"), name: "examen.pdf" },
+    });
+    assert.equal(adj.status, 201, errores(adj));
+
+    await http("PATCH", `/medical-records/${nueva.data.record.id}/annul`, { token: ctx.vet, body: { reason: "Prueba de adjuntos" } });
+    assert.equal((await bajar(ctx.clienteA, adj.data.attachment.id)).status, 404, "el dueño ya no lo ve");
+    assert.equal((await bajar(ctx.vet, adj.data.attachment.id)).status, 200, "el veterinario si, para auditoria");
+    const mas = await http("POST", `/medical-records/${nueva.data.record.id}/attachments`, { token: ctx.vet, body: { file: pdfDe("otro") } });
+    assert.equal(mas.status, 409);
   });
 });
 

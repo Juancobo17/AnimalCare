@@ -28,6 +28,11 @@ async function main() {
 
   await prisma.notification.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.authToken.deleteMany({ where: { userId: { in: userIds } } });
+  const adjuntos = await prisma.medicalAttachment.findMany({
+    where: { record: { OR: [{ pet: { userId: { in: userIds } } }, { vetProfileId: { in: vetIds } }] } },
+  });
+  for (const adjunto of adjuntos) await uploads.deleteRecordFile(adjunto.storedName);
+  await prisma.medicalAttachment.deleteMany({ where: { id: { in: adjuntos.map((a) => a.id) } } });
   await prisma.medicalRecord.deleteMany({
     where: { OR: [{ pet: { userId: { in: userIds } } }, { vetProfileId: { in: vetIds } }] },
   });

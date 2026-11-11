@@ -1362,3 +1362,56 @@
 .documento li {
   margin-bottom: 6px;
 }
+
+/* ---------- Adjuntos de la historia clinica ---------- */
+
+.adjuntos {
+  margin: 12px 0 8px;
+}
+
+.adjuntos h5 {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.adjuntos-lista {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.adjuntos-lista li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--borde);
+}
+
+.adjunto-tipo {
+  min-width: 42px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--verde-700);
+  background-color: var(--verde-50);
+  border: 1px solid var(--verde-200);
+  border-radius: 6px;
+}
+
+.adjunto-nombre {
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.adjunto-quitar {
+  margin-left: auto;
+  color: var(--error-texto);
+}

@@ -147,6 +147,18 @@ La historia clínica de una mascota es la lista de sus entradas, una por consult
   * **Dado que** un veterinario no tiene ni tuvo citas con una mascota,
   * **Cuando** intenta ver su historia o escribir en ella,
   * **Entonces** el sistema responde que la mascota no existe o que no tiene acceso.
+* **Escenario 5: Adjuntar exámenes o radiografías**
+  * **Dado que** el veterinario escribió una entrada vigente,
+  * **Cuando** presiona "Adjuntar archivo" y elige un PDF, JPG o PNG de hasta 5 MB,
+  * **Entonces** el archivo queda en la entrada (hasta 10 por entrada) y se muestra con su nombre, tipo y tamaño.
+* **Escenario 6: Archivos no permitidos**
+  * **Dado que** el veterinario intenta adjuntar un archivo,
+  * **Cuando** el formato no es PDF, JPG o PNG, el contenido no corresponde a su formato, pesa más de 5 MB o la entrada ya tiene 10 archivos,
+  * **Entonces** el sistema no lo guarda y explica el motivo.
+* **Escenario 7: Quitar un archivo**
+  * **Dado que** el veterinario es el autor de la entrada,
+  * **Cuando** presiona "Quitar" en un adjunto y confirma,
+  * **Entonces** el archivo desaparece de la entrada y se borra del servidor. Otro veterinario o el dueño no pueden quitarlo.
 
 ---
 
@@ -215,3 +227,11 @@ Por tratarse de información médica, eliminar **anula** la entrada: se conserva
   * **Dado que** la historia tiene registros,
   * **Cuando** el dueño presiona "Imprimir",
   * **Entonces** se imprime solo el contenido de la historia, sin menús ni botones.
+* **Escenario 6: Ver los archivos adjuntos**
+  * **Dado que** el veterinario adjuntó archivos a una entrada,
+  * **Cuando** el dueño abre la historia y pulsa el nombre de un archivo,
+  * **Entonces** el archivo se abre en otra pestaña. Los archivos son privados: solo los ven el dueño de la mascota y los veterinarios que la atienden; con la sesión cerrada, o con la sesión de otro dueño, no se descargan.
+* **Escenario 7: Entrada eliminada**
+  * **Dado que** el veterinario eliminó una entrada,
+  * **Cuando** el dueño consulta la historia,
+  * **Entonces** ya no ve la entrada ni puede descargar sus archivos.

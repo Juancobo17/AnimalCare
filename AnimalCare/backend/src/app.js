@@ -40,6 +40,7 @@ app.use(
 // La foto y la tarjeta profesional llegan en base64: esas dos rutas aceptan
 // cuerpos mas grandes. Van antes del lector general, que ya no los vuelve a leer.
 app.use(["/api/vets/me/photo", "/api/vets/me/license-doc"], express.json({ limit: "8mb" }));
+app.use(/^\/api\/medical-records\/\d+\/attachments$/, express.json({ limit: "8mb" }));
 
 // Permite leer cuerpos JSON en las peticiones.
 app.use(express.json());

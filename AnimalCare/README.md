@@ -104,6 +104,11 @@ Reglas de la historia clinica:
   (no cancelada). Ve tambien las entradas de otros veterinarios, pero solo modifica o elimina las suyas.
 - Eliminar no borra: anula la entrada con un motivo. El dueño deja de verla y se conserva para auditoria.
 - El dueño consulta (solo lectura) la historia de sus mascotas y recibe un aviso con cada entrada nueva.
+- **Adjuntos:** el veterinario que escribio una entrada vigente le adjunta examenes, radiografias o
+  informes (PDF, JPG o PNG, hasta 5 MB y 10 por entrada) y puede quitarlos. Son privados: se guardan en
+  `backend/uploads/records` con nombre aleatorio y solo se descargan por la API
+  (`GET /api/medical-records/attachments/:id`) con sesion y permiso. Si la entrada se elimina, el dueño
+  deja de verlos; el veterinario si, para auditoria.
 
 ## Zona horaria
 
@@ -374,6 +379,9 @@ maquina.
 | POST   | /api/medical-records     | Si      | VETERINARIAN | Crea una entrada (AN-18)                     |
 | PUT    | /api/medical-records/:id | Si      | VETERINARIAN | Modifica una entrada propia (AN-20)          |
 | PATCH  | /api/medical-records/:id/annul | Si | VETERINARIAN | Elimina (anula) una entrada propia `{ reason }` (AN-19) |
+| POST   | /api/medical-records/:id/attachments | Si | VETERINARIAN | Adjunta un archivo a una entrada propia `{ file: dataURL, name? }` (PDF, JPG o PNG, max. 5 MB) |
+| GET    | /api/medical-records/attachments/:attachmentId | Si | CLIENT, VETERINARIAN | Descarga un adjunto (privado: solo con permiso sobre la mascota) |
+| DELETE | /api/medical-records/attachments/:attachmentId | Si | VETERINARIAN | Quita un adjunto de una entrada propia |
 | GET    | /api/pets                | Si      | CLIENT   | Mascotas activas del dueño                       |
 | POST   | /api/pets                | Si      | CLIENT   | Registra una mascota `{ name, species, sex, birthDate, weight? }` |
 | PUT    | /api/pets/:id            | Si      | CLIENT   | Actualiza una mascota propia                     |
@@ -522,7 +530,7 @@ request, con una base MySQL temporal. Un pull request con pruebas fallidas queda
 Las evidencias manuales (Postman, capturas) se guardan en la carpeta `docs/`.
 
 Ademas, `backend/tests/sprint2.test.js` recorre automaticamente los criterios de aceptacion del
-Sprint 2, del Sprint 3, de las mejoras y de la cuenta contra la API (123 casos). Con el backend corriendo, desde `backend/`:
+Sprint 2, del Sprint 3, de las mejoras y de la cuenta contra la API (132 casos). Con el backend corriendo, desde `backend/`:
 
 ```
 npm test
