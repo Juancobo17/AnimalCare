@@ -1,0 +1,87 @@
+// Operaciones de autenticacion contra la API y manejo de la sesion local.
+import api from "./api";
+
+// POST /api/auth/register
+// datos lleva siempre name, email y password. Si el tipo de cuenta es
+// VETERINARIAN, incluye ademas los datos profesionales (AN-7).
+export async function registrar(datos) {
+  const respuesta = await api.post("/auth/register", datos);
+  return respuesta.data;
+}
+
+// POST /api/auth/login
+// Si las credenciales son correctas, guarda el token y el usuario.
+export async function iniciarSesion({ email, password }) {
+  const respuesta = await api.post("/auth/login", { email, password });
+  const { token, user } = respuesta.data;
+
+  localStorage.setItem("token", token);
+  localStorage.setItem("usuario", JSON.stringify(user));
+
+  return respuesta.data;
+}
+
+// GET /api/auth/me
+// Vuelve a pedir los datos del usuario y actualiza la copia local.
+// Sirve para que el veterinario vea el cambio de estado (por ejemplo, cuando
+// el administrador aprueba su cuenta) sin tener que cerrar sesion.
+export async function actualizarUsuario() {
+  const respuesta = await api.get("/auth/me");
+  const { user } = respuesta.data;
+  localStorage.setItem("usuario", JSON.stringify(user));
+  return user;
+}
+
+// Cierra la sesion borrando los datos guardados en el navegador.
+export function cerrarSesion() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("usuario");
+}
+
+export function obtenerToken() {
+  return localStorage.getItem("token");
+}
+
+export function obtenerUsuario() {
+  const guardado = localStorage.getItem("usuario");
+  if (!guardado) {
+    return null;
+  }
+  try {
+    return JSON.parse(guardado);
+  } catch {
+    return null;
+  }
+}
+
+export function haySesionActiva() {
+  return Boolean(obtenerToken());
+}
+
+// El rol decide que panel y que opciones ve la persona que inicio sesion.
+export function esVeterinario() {
+  return obtenerUsuario()?.role === "VETERINARIAN";
+}
+
+export function esAdministrador() {
+  return obtenerUsuario()?.role === "ADMIN";
+}
+
+// AN-8 escenario 3: veterinario registrado cuya matricula aun no se valida.
+export function esVeterinarioPendiente(usuario = obtenerUsuario()) {
+  return usuario?.role === "VETERINARIAN" && usuario?.status === "PENDING";
+}
+
+// Aviso que se muestra en el login cuando la sesion se cerro sola
+// (por ejemplo, porque el administrador suspendio la cuenta).
+const CLAVE_AVISO = "avisoSesion";
+
+export function guardarAvisoDeSesion(mensaje) {
+  sessionStorage.setItem(CLAVE_AVISO, mensaje);
+}
+
+export function tomarAvisoDeSesion() {
+  const mensaje = sessionStorage.getItem(CLAVE_AVISO);
+  sessionStorage.removeItem(CLAVE_AVISO);
+  return mensaje;
+}
