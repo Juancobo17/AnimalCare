@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import Selector from "../components/Selector";
+import { usarTitulo } from "../hooks/usarTitulo";
 import AuthLayout from "../components/AuthLayout";
 import Alerta from "../components/Alerta";
 import { registrar } from "../services/auth.service";
@@ -24,6 +26,7 @@ const SERVICIO_VACIO = { name: "", price: "", durationMinutes: "30" };
 const DURACIONES = [15, 30, 45, 60, 90, 120];
 
 function Register() {
+  usarTitulo("Crear cuenta");
   const navigate = useNavigate();
 
   // AN-6 registra un cliente y AN-7 un veterinario: es el mismo formulario
@@ -515,7 +518,7 @@ function Register() {
 
                 <div className="campo campo-corto">
                   <label htmlFor={`servicio-duracion-${indice}`}>Duración</label>
-                  <select
+                  <Selector
                     id={`servicio-duracion-${indice}`}
                     value={servicio.durationMinutes}
                     onChange={(evento) =>
@@ -527,7 +530,7 @@ function Register() {
                         {minutos} min
                       </option>
                     ))}
-                  </select>
+                  </Selector>
                 </div>
 
                 {servicios.length > 1 && (

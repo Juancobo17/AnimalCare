@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 300" width="360" height="300" role="img" aria-label="AnimalCare">
+  <title>AnimalCare</title>
+  <defs>
+    <symbol id="huella" viewBox="0 0 64 64">
+      <ellipse cx="10.5" cy="25" rx="5" ry="6.8" transform="rotate(-24 10.5 25)"/>
+      <ellipse cx="23.5" cy="13.5" rx="5.5" ry="7.4" transform="rotate(-8 23.5 13.5)"/>
+      <ellipse cx="40.5" cy="13.5" rx="5.5" ry="7.4" transform="rotate(8 40.5 13.5)"/>
+      <ellipse cx="53.5" cy="25" rx="5" ry="6.8" transform="rotate(24 53.5 25)"/>
+      <path d="M32 59C20.5 51.5 15 45.5 15 39.2 15 33.6 19.3 30 24 30c3.4 0 6.2 1.8 8 4.4 1.8-2.6 4.6-4.4 8-4.4 4.7 0 9 3.6 9 9.2 0 6.3-5.5 12.3-17 19.8z"/>
+    </symbol>
+  </defs>
+
+  <circle cx="180" cy="96" r="80" fill="#258355"/>
+  <circle cx="180" cy="96" r="80" fill="none" stroke="#1c6742" stroke-width="2.5"/>
+  <use href="#huella" x="126" y="39" width="108" height="108" fill="#ffffff"/>
+  <path d="M176.9 102.4h6.2v7.2h7.2v6.2h-7.2v7.2h-6.2v-7.2h-7.2v-6.2h7.2z" fill="#258355"/>
+
+  <text x="180" y="244" text-anchor="middle" font-family="Figtree, 'Segoe UI', system-ui, -apple-system, Arial, sans-serif" font-size="60" font-weight="800" letter-spacing="-1.5" fill="#17251d">Animal<tspan fill="#258355">Care</tspan></text>
+  <text x="180" y="274" text-anchor="middle" font-family="Figtree, 'Segoe UI', system-ui, -apple-system, Arial, sans-serif" font-size="15" font-weight="500" letter-spacing="1.4" fill="#5c6a62">CUIDADO VETERINARIO CERCA DE TI</text>
+</svg>

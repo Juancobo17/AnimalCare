@@ -39,7 +39,7 @@ function Notificaciones() {
   return (
     <div className="tarjeta notificaciones" aria-live="polite">
       <div className="encabezado-seccion">
-        <h3>Notificaciones sin leer ({sinLeer.length})</h3>
+        <h3>Notificaciones ({sinLeer.length})</h3>
         <Link to="/notificaciones" className="enlace-seccion">
           Ver todas
         </Link>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { usarTitulo } from "../hooks/usarTitulo";
 import Cabecera from "../components/Cabecera";
 import Alerta from "../components/Alerta";
 import { obtenerUsuario, cerrarSesion } from "../services/auth.service";
@@ -17,6 +18,7 @@ import {
 import { obtenerMensajesDeError } from "../services/api";
 
 function MiCuenta() {
+  usarTitulo("Mi cuenta");
   const navigate = useNavigate();
   const [usuario, setUsuario] = useState(obtenerUsuario);
   const esAdministrador = usuario?.role === "ADMIN";
@@ -86,7 +88,7 @@ function MiCuenta() {
   return (
     <div className="pagina">
       <Cabecera />
-      <main className="contenedor">
+      <main className="contenedor contenedor-medio">
         <div className="tarjeta">
           <h1>Mi cuenta</h1>
           <p className="texto-suave">

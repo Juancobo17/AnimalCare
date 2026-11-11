@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { usarTitulo } from "../hooks/usarTitulo";
 import Cabecera from "../components/Cabecera";
 import Alerta from "../components/Alerta";
 import FotoVeterinario from "../components/FotoVeterinario";
@@ -20,6 +21,7 @@ const MAX_FOTO_MB = 3;
 const MAX_DOC_MB = 5;
 
 function MiPerfil() {
+  usarTitulo("Mi perfil");
   const [perfil, setPerfil] = useState(null);
   const [datos, setDatos] = useState(null);
   const [errores, setErrores] = useState([]);
@@ -142,7 +144,8 @@ function MiPerfil() {
         {!perfil && errores.length === 0 && <p className="texto-suave">Cargando perfil...</p>}
 
         {perfil && datos && (
-          <>
+          <div className="perfil-cols">
+            <div className="perfil-lateral">
             <div className="tarjeta">
               <h3>Foto de perfil</h3>
               <div className="foto-editor">
@@ -181,7 +184,7 @@ function MiPerfil() {
               <h3>Tarjeta profesional</h3>
               <p className="texto-suave">
                 {perfil.hasLicenseDoc
-                  ? "✓ Ya cargaste tu tarjeta profesional. Solo el administrador puede verla."
+                  ? "Ya cargaste tu tarjeta profesional. Solo el administrador puede verla."
                   : perfil.status === "PENDING"
                     ? "Sube una foto o PDF de tu tarjeta profesional para que el administrador pueda verificar tu matrícula más rápido."
                     : "Puedes cargar tu tarjeta profesional. Solo el administrador puede verla."}
@@ -204,6 +207,8 @@ function MiPerfil() {
                 {subiendo === "doc" ? "Subiendo..." : perfil.hasLicenseDoc ? "Reemplazar archivo" : "Subir tarjeta profesional"}
               </button>
               <span className="ayuda">PDF, JPG o PNG, hasta {MAX_DOC_MB} MB.</span>
+            </div>
+
             </div>
 
             <form className="tarjeta" onSubmit={guardar} noValidate>
@@ -270,7 +275,7 @@ function MiPerfil() {
                 {guardando ? "Guardando..." : "Guardar cambios"}
               </button>
             </form>
-          </>
+          </div>
         )}
       </main>
     </div>

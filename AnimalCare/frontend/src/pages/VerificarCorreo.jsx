@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
+import { usarTitulo } from "../hooks/usarTitulo";
 import AuthLayout from "../components/AuthLayout";
 import Alerta from "../components/Alerta";
 import { verificarCorreo } from "../services/account.service";
@@ -9,6 +10,7 @@ import { obtenerUsuario, actualizarUsuario, haySesionActiva } from "../services/
 import { obtenerMensajesDeError } from "../services/api";
 
 function VerificarCorreo() {
+  usarTitulo("Verificar correo");
   const [parametros] = useSearchParams();
   const token = parametros.get("token") || "";
   const [estado, setEstado] = useState(token ? "verificando" : "error");
@@ -41,7 +43,7 @@ function VerificarCorreo() {
     <AuthLayout>
       <h1>Confirmación de correo</h1>
       {estado === "verificando" && <p className="texto-suave">Confirmando tu correo...</p>}
-      <Alerta tipo="exito" mensajes={estado === "ok" ? [mensaje] : []} />
+      <Alerta tipo="exito" fijo mensajes={estado === "ok" ? [mensaje] : []} />
       <Alerta tipo="error" mensajes={estado === "error" ? [mensaje] : []} />
       <p className="auth-pie">
         {sesion ? <Link to="/dashboard">Ir a mi panel</Link> : <Link to="/login">Iniciar sesión</Link>}

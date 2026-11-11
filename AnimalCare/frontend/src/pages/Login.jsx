@@ -1,15 +1,19 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
+import { usarTitulo } from "../hooks/usarTitulo";
 import AuthLayout from "../components/AuthLayout";
 import Alerta from "../components/Alerta";
 import { iniciarSesion, tomarAvisoDeSesion } from "../services/auth.service";
 import { obtenerMensajesDeError } from "../services/api";
 
 function Login() {
+  usarTitulo("Iniciar sesión");
   const navigate = useNavigate();
   // Mensaje que llega, por ejemplo, tras cerrar sesion.
   const mensajeInicial = useLocation().state?.mensaje;
+  // Estable entre renders: asi el aviso aparece una sola vez y no se reinicia al escribir.
+  const avisosIniciales = useMemo(() => (mensajeInicial ? [mensajeInicial] : []), [mensajeInicial]);
 
   const [datos, setDatos] = useState({ email: "", password: "" });
   // Si la sesion se cerro porque la cuenta fue suspendida, se muestra el motivo.
@@ -66,7 +70,7 @@ function Login() {
       <h1>Iniciar sesión</h1>
       <p className="auth-subtitulo">Ingresa a tu cuenta para gestionar tus mascotas.</p>
 
-      <Alerta tipo="exito" mensajes={mensajeInicial ? [mensajeInicial] : []} />
+      <Alerta tipo="exito" mensajes={avisosIniciales} />
       <Alerta tipo="error" mensajes={errores} />
 
       <form onSubmit={manejarEnvio} noValidate>

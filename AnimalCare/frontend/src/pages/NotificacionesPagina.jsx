@@ -2,8 +2,10 @@
 // que el sistema envia sobre citas, cancelaciones y el estado de la cuenta.
 import { useEffect, useState } from "react";
 
+import { usarTitulo } from "../hooks/usarTitulo";
 import Cabecera from "../components/Cabecera";
 import Alerta from "../components/Alerta";
+import Icono from "../components/Icono";
 import {
   listarNotificaciones,
   marcarNotificacionLeida,
@@ -13,6 +15,7 @@ import {
 import { obtenerMensajesDeError, esErrorDeConexion } from "../services/api";
 
 function NotificacionesPagina() {
+  usarTitulo("Notificaciones");
   const [notificaciones, setNotificaciones] = useState([]);
   const [soloSinLeer, setSoloSinLeer] = useState(false);
   const [cargando, setCargando] = useState(true);
@@ -98,15 +101,34 @@ function NotificacionesPagina() {
         />
 
         <div className="tarjeta notificaciones">
-          {cargando && <p className="texto-suave">Cargando notificaciones...</p>}
-          {!cargando && visibles.length === 0 && errores.length === 0 && (
-            <p className="texto-suave">
-              {soloSinLeer ? "No tienes notificaciones sin leer." : "Todavía no tienes notificaciones."}
-            </p>
+          {cargando && (
+            <div className="lista-notificaciones" aria-busy="true" aria-label="Cargando notificaciones">
+              <div className="esqueleto" style={{ height: 64 }} />
+              <div className="esqueleto" style={{ height: 64 }} />
+              <div className="esqueleto" style={{ height: 64 }} />
+            </div>
           )}
-          <ul>
+          {!cargando && visibles.length === 0 && errores.length === 0 && (
+            <div className="estado-vacio estado-vacio-compacto">
+              <span className="estado-vacio-icono">
+                <Icono nombre="campana" tamano={26} />
+              </span>
+              <div>
+                <h2>{soloSinLeer ? "Estás al día" : "Aún no tienes notificaciones"}</h2>
+                <p className="texto-suave">
+                  {soloSinLeer
+                    ? "No tienes notificaciones sin leer."
+                    : "Te avisaremos aquí cuando confirmen, cambien o se acerque una cita."}
+                </p>
+              </div>
+            </div>
+          )}
+          <ul className="lista-notificaciones">
             {visibles.map((n) => (
               <li key={n.id} className={n.read ? "notificacion-leida" : "notificacion-nueva"}>
+                <span className="notificacion-icono" aria-hidden="true">
+                  <Icono nombre="campana" tamano={18} />
+                </span>
                 <div>
                   <p>{n.message}</p>
                   <span className="texto-suave">{formatearMomento(n.createdAt)}</span>

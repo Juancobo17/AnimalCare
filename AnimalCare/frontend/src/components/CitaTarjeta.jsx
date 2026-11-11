@@ -12,6 +12,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import Selector from "./Selector";
 import { MODALIDADES, obtenerHorarios } from "../services/vet.service";
 import {
   ESTADOS_CITA,
@@ -29,7 +30,10 @@ import {
   HORAS_MINIMAS_CANCELACION,
   hoyLocal,
 } from "../services/appointment.service";
-import { ICONO_ESPECIE } from "../services/pet.service";
+import Icono from "./Icono";
+import { Star } from "lucide-react";
+import IconoEspecie from "./IconoEspecie";
+import Estrellas from "./Estrellas";
 import { obtenerMensajesDeError } from "../services/api";
 
 function FormularioReprogramar({ cita, onListo, onCerrar }) {
@@ -88,7 +92,7 @@ function FormularioReprogramar({ cita, onListo, onCerrar }) {
         </div>
         <div className="campo">
           <label htmlFor={`hora-${cita.id}`}>Nueva hora</label>
-          <select
+          <Selector
             id={`hora-${cita.id}`}
             value={hora}
             onChange={(e) => setHora(e.target.value)}
@@ -102,7 +106,7 @@ function FormularioReprogramar({ cita, onListo, onCerrar }) {
                 {h}
               </option>
             ))}
-          </select>
+          </Selector>
         </div>
       </div>
       <div className="campo">
@@ -158,7 +162,7 @@ function FormularioCalificar({ cita, onListo, onCerrar }) {
             className={n <= estrellas ? "estrella llena" : "estrella"}
             onClick={() => setEstrellas(n)}
           >
-            ★
+            <Star size={30} strokeWidth={1.8} aria-hidden="true" />
           </button>
         ))}
       </div>
@@ -264,7 +268,7 @@ function CitaTarjeta({ cita, perspectiva = "cliente", onActualizada }) {
 
         {cita.pet && (
           <p className="texto-suave">
-            {ICONO_ESPECIE[cita.pet.species] || "🐾"} {cita.pet.name} ({cita.pet.species})
+            <IconoEspecie especie={cita.pet.species} tamano={16} /> {cita.pet.name} ({cita.pet.species})
             {esVistaDelVeterinario && cita.status !== "CANCELLED" && (
               <>
                 {" · "}
@@ -273,17 +277,24 @@ function CitaTarjeta({ cita, perspectiva = "cliente", onActualizada }) {
             )}
           </p>
         )}
-        {direccion && <p className="texto-suave">📍 {direccion}</p>}
+        {direccion && (
+          <p className="texto-suave dato-icono">
+            <Icono nombre="ubicacion" tamano={15} grosor={2} />
+            {direccion}
+          </p>
+        )}
         {esVistaDelVeterinario && cita.client?.email && (
-          <p className="texto-suave">✉ {cita.client.email}</p>
+          <p className="texto-suave dato-icono">
+            <Icono nombre="correo" tamano={15} grosor={2} />
+            {cita.client.email}
+          </p>
         )}
         {cita.notes && <p className="cita-notas">“{cita.notes}”</p>}
 
         {cita.review && (
           <p className="cita-resena">
-            <span className="calificacion-estrellas" aria-label={`${cita.review.rating} de 5`}>
-              {"★".repeat(cita.review.rating)}
-              {"☆".repeat(5 - cita.review.rating)}
+            <span className="calificacion-estrellas" role="img" aria-label={`${cita.review.rating} de 5`}>
+              <Estrellas valor={cita.review.rating} />
             </span>
             {cita.review.comment && <span className="texto-suave"> “{cita.review.comment}”</span>}
           </p>
@@ -326,13 +337,17 @@ function CitaTarjeta({ cita, perspectiva = "cliente", onActualizada }) {
           </div>
         )}
         {esVistaDelVeterinario && cita.medicalRecordId && (
-          <p className="ayuda">✓ Registrada en la historia clínica.</p>
+          <p className="ayuda dato-icono">
+            <Icono nombre="check" tamano={14} grosor={2.6} />
+            Registrada en la historia clínica.
+          </p>
         )}
 
         {panel === null && calificable && (
           <div className="cita-acciones">
             <button type="button" className="boton boton-primario boton-auto" onClick={() => setPanel("calificar")}>
-              ★ Calificar atención
+              <Star size={18} strokeWidth={2} aria-hidden="true" />
+              Calificar atención
             </button>
           </div>
         )}

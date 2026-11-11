@@ -1,0 +1,622 @@
+/* ==========================================================
+   AnimalCare - Panel principal (Dashboard)
+   Saludo, proxima cita destacada, accesos rapidos y columnas.
+   Depende de las variables de index.css.
+   ========================================================== */
+
+.contenedor-ancho {
+  max-width: var(--ancho-max);
+}
+
+.inicio {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 36px;
+  padding-bottom: 56px;
+}
+
+.inicio .tarjeta {
+  margin-bottom: 0;
+}
+
+/* Las secciones aparecen con un desplazamiento corto al cargar. */
+.inicio > * {
+  animation: aparecer 0.3s ease-out both;
+}
+
+.inicio > *:nth-child(2) { animation-delay: 0.04s; }
+.inicio > *:nth-child(3) { animation-delay: 0.08s; }
+.inicio > *:nth-child(4) { animation-delay: 0.12s; }
+
+/* ---------- Saludo ---------- */
+
+.inicio-saludo {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 32px 200px 32px 36px;
+  overflow: hidden;
+  background-color: var(--verde-tinte);
+  border: 1px solid #d3e5da;
+  border-radius: 18px;
+}
+
+/* Huella completa a la derecha, como marca de agua. El padding derecho
+   del banner le reserva su espacio para que no choque con los botones. */
+.inicio-saludo::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 28px;
+  width: 150px;
+  height: 150px;
+  background: url("/marca-agua.svg") no-repeat center / contain;
+  transform: translateY(-50%) rotate(-12deg);
+  pointer-events: none;
+}
+
+.inicio-saludo > * {
+  position: relative;
+}
+
+.inicio-saludo-texto {
+  flex: 1 1 420px;
+  min-width: 0;
+}
+
+.inicio-saludo h1 {
+  margin-bottom: 6px;
+  font-size: 2.1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.inicio-saludo p {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.inicio-fecha {
+  margin-bottom: 4px !important;
+  font-size: 0.9rem !important;
+  font-weight: 500;
+  color: var(--texto-suave);
+}
+
+/* ---------- Proxima cita ---------- */
+
+.proxima-cita {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 24px;
+}
+
+.bloque-fecha {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 84px;
+  overflow: hidden;
+  text-align: center;
+  border: 1px solid #dfe6e1;
+  border-radius: 12px;
+}
+
+.bloque-fecha-mes {
+  padding: 4px 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--blanco);
+  background-color: var(--verde-700);
+}
+
+.bloque-fecha-dia {
+  padding-top: 6px;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--tinta);
+}
+
+.bloque-fecha-semana {
+  padding-bottom: 8px;
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+  text-transform: capitalize;
+}
+
+.proxima-cita-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 340px;
+  min-width: 0;
+}
+
+.proxima-cita-etiqueta {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--verde-600);
+}
+
+.proxima-cita h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.proxima-cita h2 .texto-suave {
+  font-weight: 600;
+}
+
+.proxima-cita-detalles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  font-size: 0.9rem;
+  color: var(--texto-medio);
+}
+
+.proxima-cita-detalles span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.proxima-cita-detalles svg {
+  flex-shrink: 0;
+  color: var(--texto-suave);
+}
+
+.proxima-cita-lado {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+/* ---------- Estado vacio ---------- */
+
+.estado-vacio {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.estado-vacio h2 {
+  font-size: 1.2rem;
+  margin-bottom: 4px;
+}
+
+.estado-vacio p {
+  margin: 0 0 16px;
+  max-width: 560px;
+}
+
+.estado-vacio-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 56px;
+  width: 56px;
+  height: 56px;
+  color: var(--verde-700);
+  background-color: var(--verde-tinte);
+  border-radius: 14px;
+}
+
+/* ---------- Accesos rapidos ---------- */
+
+.accesos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.acceso {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  color: var(--texto);
+  text-decoration: none;
+  background-color: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  box-shadow: var(--sombra);
+  transition: border-color var(--transicion), box-shadow var(--transicion), transform var(--transicion);
+}
+
+.acceso:hover {
+  color: var(--texto);
+  border-color: var(--verde-borde);
+  box-shadow: var(--sombra-elevada);
+  transform: translateY(-1px);
+}
+
+.acceso-icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 46px;
+  height: 46px;
+  color: var(--verde-700);
+  background-color: var(--verde-tinte);
+  border-radius: 12px;
+}
+
+.acceso-texto {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.acceso-texto strong {
+  font-size: 1rem;
+  color: var(--tinta);
+}
+
+.acceso-texto span {
+  font-size: 0.88rem;
+  font-weight: 400;
+  color: var(--texto-suave);
+}
+
+.acceso-flecha {
+  display: inline-flex;
+  color: #8a968f;
+  transition: transform var(--transicion), color var(--transicion);
+}
+
+.acceso:hover .acceso-flecha {
+  color: var(--verde-600);
+  transform: translateX(2px);
+}
+
+/* Tonos de apoyo: arena y cielo acompañan al verde sin competir con el. */
+.tono-arena {
+  color: #7a4f12;
+  background-color: #f6eedf;
+}
+
+.tono-cielo {
+  color: #2f4a66;
+  background-color: #e3eaf2;
+}
+
+.tono-verde {
+  color: var(--verde-700);
+  background-color: var(--verde-tinte);
+}
+
+/* ---------- Columnas ---------- */
+
+.inicio-columnas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.inicio-principal {
+  flex: 999 1 560px;
+  min-width: 0;
+}
+
+.inicio-lateral {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.inicio-lateral .tarjeta {
+  margin-bottom: 0;
+}
+
+.tarjeta-lateral h3,
+.inicio-lateral .notificaciones h3,
+.inicio-principal h3 {
+  font-size: 1.1rem;
+}
+
+.resumen-mascotas {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resumen-mascotas li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.resumen-mascotas li > span:last-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.resumen-mascotas .texto-suave {
+  font-size: 0.85rem;
+}
+
+.mascota-inicial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 40px;
+  height: 40px;
+  font-weight: 700;
+  border-radius: 50%;
+}
+
+.datos-apilados {
+  grid-template-columns: 1fr;
+  margin-top: 4px;
+}
+
+/* ---------- Cifras del administrador ---------- */
+
+.cifras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.cifra {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 20px;
+  text-decoration: none;
+  background-color: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  box-shadow: var(--sombra);
+  transition: box-shadow var(--transicion), transform var(--transicion);
+}
+
+.cifra:hover {
+  box-shadow: var(--sombra-elevada);
+  transform: translateY(-1px);
+}
+
+.cifra-valor {
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.cifra-titulo {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+}
+
+.cifra-pendiente .cifra-valor { color: #8a5300; }
+.cifra-activa .cifra-valor { color: var(--verde-700); }
+.cifra-suspendida .cifra-valor { color: #4b5563; }
+.cifra-rechazada .cifra-valor { color: var(--error-texto); }
+
+.cifra-pendiente {
+  background-color: #fffaf0;
+  border-color: #f1dfb8;
+}
+
+/* ---------- Pantallas pequenas ---------- */
+
+@media (max-width: 1000px) {
+  .inicio-saludo {
+    padding-right: 36px;
+  }
+
+  .inicio-saludo::before {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .inicio {
+    padding-top: 24px;
+    gap: 18px;
+  }
+
+  .inicio-saludo {
+    padding: 24px 20px;
+  }
+
+  .inicio-saludo::before {
+    display: none;
+  }
+
+  .inicio-saludo h1 {
+    font-size: 1.7rem;
+  }
+
+  .proxima-cita-lado {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .estado-vacio {
+    flex-direction: column;
+  }
+}
+
+/* ---------- Tabletas ---------- */
+
+@media (max-width: 900px) {
+  .contenedor {
+    padding: 24px 20px;
+  }
+
+  .inicio-lateral {
+    flex-basis: 100%;
+  }
+}
+
+/* ---------- Telefonos pequenos ---------- */
+
+@media (max-width: 480px) {
+  .contenedor {
+    padding: 20px 16px;
+  }
+
+  
+
+  /* Botones a todo el ancho: mas faciles de tocar con el pulgar. */
+  .inicio-saludo .acciones,
+  .inicio-saludo .acciones .boton,
+  .proxima-cita-lado .boton {
+    width: 100%;
+  }
+
+  .proxima-cita {
+    gap: 16px;
+  }
+
+  .bloque-fecha {
+    flex-direction: row;
+    flex: 1 1 100%;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 8px 12px;
+  }
+
+  .bloque-fecha-mes,
+  .bloque-fecha-semana {
+    padding: 0;
+    background: none;
+    color: var(--texto-suave);
+  }
+
+  .bloque-fecha-dia {
+    padding: 0;
+    font-size: 1.5rem;
+  }
+
+  .tarjeta {
+    padding: 18px;
+  }
+
+  .acceso {
+    padding: 14px;
+  }
+
+  
+}
+
+/* ==========================================================
+   Tema con mas color: cabecera verde oscuro y banner de saludo
+   en verde solido. Las tarjetas se mantienen claras para que la
+   informacion siga siendo lo que mas resalta.
+   ========================================================== */
+
+/* ---------- Cabecera ---------- */
+
+/* ==========================================================
+   Recuadros: se resaltan al pasar el cursor, al enfocarlos con
+   el teclado y cuando estan seleccionados.
+   ========================================================== */
+
+.acceso,
+.cifra,
+.tarjeta-veterinario,
+.cita,
+.opcion-rol {
+  transition: border-color var(--transicion), box-shadow var(--transicion), transform var(--transicion),
+    background-color var(--transicion);
+}
+
+.acceso:hover,
+.cifra:hover,
+.tarjeta-veterinario:hover,
+.cita:hover {
+  border-color: var(--verde-500);
+  box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.18), var(--sombra-elevada);
+  transform: translateY(-2px);
+}
+
+.acceso:focus-visible,
+.cifra:focus-visible {
+  outline: none;
+  border-color: var(--verde-600);
+  box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.4), var(--sombra-elevada);
+}
+
+/* Tarjeta con un campo o boton enfocado dentro. */
+.tarjeta:focus-within,
+.cita:focus-within {
+  border-color: var(--verde-500);
+  box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.16), var(--sombra);
+}
+
+/* Opciones elegibles (tipo de cuenta, modalidad de atencion). */
+.opcion-rol:has(input:focus-visible) {
+  box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.45);
+}
+
+/* Campos de formulario. */
+@media (hover: none) {
+  .acceso:hover,
+  .cifra:hover,
+  .tarjeta-veterinario:hover,
+  .cita:hover {
+    transform: none;
+  }
+}
+
+/* Respuesta visual al pulsar un boton. */
+.boton:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
+}
+
+.boton-primario:active:not(:disabled) {
+  background-color: var(--verde-oscuro);
+}
+
+.boton-secundario:active:not(:disabled) {
+  background-color: #e3efe7;
+  border-color: var(--verde-500);
+}
+
+/* Formulario recien abierto: queda marcado mientras se llena. */
+.tarjeta:has(form):focus-within {
+  border-color: var(--verde-600);
+  box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.25), var(--sombra-elevada);
+}
+
+/* Boton seleccionado: mismo efecto que las tarjetas de acceso al seleccionarlas
+   (borde verde, halo suave y un pequeno levantamiento). */
+.boton-seleccionado,
+.boton-seleccionado:hover,
+.boton-seleccionado:active:not(:disabled) {
+  color: var(--verde-700);
+  background-color: var(--superficie);
+  border-color: var(--verde-500);
+  box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.18), var(--sombra-elevada);
+  transform: translateY(-2px);
+}
+
+/* Los botones de contorno reaccionan igual al pasar el cursor. */
+.boton-secundario:hover:not(:disabled) {
+  border-color: var(--verde-500);
+  background-color: var(--superficie);
+  box-shadow: 0 0 0 3px rgba(47, 158, 104, 0.18), var(--sombra);
+  transform: translateY(-2px);
+}

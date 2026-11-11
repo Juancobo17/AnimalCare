@@ -4,6 +4,9 @@
 import { Fragment, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import Selector from "../components/Selector";
+import Icono from "../components/Icono";
+import { usarTitulo } from "../hooks/usarTitulo";
 import Cabecera from "../components/Cabecera";
 import Alerta from "../components/Alerta";
 import {
@@ -31,6 +34,7 @@ function formatearFechaRegistro(fecha) {
 }
 
 function AdminUsuarios() {
+  usarTitulo("Usuarios");
   // El filtro de estado puede venir en la URL (?estado=PENDING) desde el panel principal.
   const [parametros] = useSearchParams();
   const [estado, setEstado] = useState(parametros.get("estado") || "");
@@ -152,28 +156,31 @@ function AdminUsuarios() {
             ))}
           </div>
 
-          <div className="filtros">
+          <div className="filtros-admin">
             <div className="campo">
               <label htmlFor="admin-busqueda">Buscar</label>
-              <input
-                id="admin-busqueda"
-                type="search"
-                maxLength={60}
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                placeholder="Nombre o correo"
-              />
+              <div className="entrada-icono">
+                <Icono nombre="buscar" tamano={18} grosor={2} />
+                <input
+                  id="admin-busqueda"
+                  type="search"
+                  maxLength={60}
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Nombre o correo"
+                />
+              </div>
             </div>
             <div className="campo">
               <label htmlFor="admin-rol">Rol</label>
-              <select id="admin-rol" value={rol} onChange={(e) => setRol(e.target.value)}>
+              <Selector id="admin-rol" value={rol} onChange={(e) => setRol(e.target.value)}>
                 <option value="">Todos</option>
                 {Object.entries(ROLES).map(([clave, texto]) => (
                   <option key={clave} value={clave}>
                     {texto}
                   </option>
                 ))}
-              </select>
+              </Selector>
             </div>
           </div>
         </div>

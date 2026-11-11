@@ -1,17 +1,20 @@
 // Mascotas del dueño: registrar, editar y quitar de la lista.
 // Al agendar una cita se elige cuál de ellas se atiende.
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
+import Selector from "../components/Selector";
+import { usarTitulo } from "../hooks/usarTitulo";
 import Cabecera from "../components/Cabecera";
 import Alerta from "../components/Alerta";
+import Icono from "../components/Icono";
+import IconoEspecie from "../components/IconoEspecie";
 import {
   listarMascotas,
   registrarMascota,
   actualizarMascota,
   desactivarMascota,
   ESPECIES,
-  ICONO_ESPECIE,
   calcularEdad,
 } from "../services/pet.service";
 import { hoyLocal } from "../services/appointment.service";
@@ -59,19 +62,19 @@ function FormularioMascota({ inicial, textoBoton, onGuardar, onCancelar }) {
           <label htmlFor={id("nombre")}>
             Nombre <span className="obligatorio">*</span>
           </label>
-          <input id={id("nombre")} name="name" maxLength={40} value={datos.name} onChange={cambiar} placeholder="Luna" />
+          <input id={id("nombre")} name="name" maxLength={40} value={datos.name} onChange={cambiar} placeholder="Luna" autoFocus />
         </div>
         <div className="campo">
           <label htmlFor={id("especie")}>
             Especie <span className="obligatorio">*</span>
           </label>
-          <select id={id("especie")} name="species" value={datos.species} onChange={cambiar}>
+          <Selector id={id("especie")} name="species" value={datos.species} onChange={cambiar}>
             {ESPECIES.map((e) => (
               <option key={e} value={e}>
-                {ICONO_ESPECIE[e]} {e}
+                {e}
               </option>
             ))}
-          </select>
+          </Selector>
         </div>
       </div>
       <div className="fila fila-tres">
@@ -79,10 +82,10 @@ function FormularioMascota({ inicial, textoBoton, onGuardar, onCancelar }) {
           <label htmlFor={id("sexo")}>
             Sexo <span className="obligatorio">*</span>
           </label>
-          <select id={id("sexo")} name="sex" value={datos.sex} onChange={cambiar}>
+          <Selector id={id("sexo")} name="sex" value={datos.sex} onChange={cambiar}>
             <option value="Macho">Macho</option>
             <option value="Hembra">Hembra</option>
-          </select>
+          </Selector>
         </div>
         <div className="campo">
           <label htmlFor={id("nacimiento")}>
@@ -110,6 +113,7 @@ function FormularioMascota({ inicial, textoBoton, onGuardar, onCancelar }) {
 }
 
 function MisMascotas() {
+  usarTitulo("Mis mascotas");
   const [mascotas, setMascotas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [errores, setErrores] = useState([]);
@@ -118,7 +122,9 @@ function MisMascotas() {
   const [intento, setIntento] = useState(0);
   const [editando, setEditando] = useState(null);
   const [quitando, setQuitando] = useState(null);
-  const [mostrarAlta, setMostrarAlta] = useState(false);
+  // Desde el panel, "Agregar mascota" llega con ?nueva=1 y abre el formulario directamente.
+  const [parametros] = useSearchParams();
+  const [mostrarAlta, setMostrarAlta] = useState(parametros.get("nueva") === "1");
 
   async function cargar() {
     const datos = await listarMascotas();
@@ -170,11 +176,24 @@ function MisMascotas() {
         <div className="tarjeta">
           <div className="encabezado-seccion">
             <h1>Mis mascotas</h1>
-            {!mostrarAlta && (
-              <button type="button" className="boton boton-primario boton-auto" onClick={() => setMostrarAlta(true)}>
-                + Agregar mascota
-              </button>
-            )}
+            <button
+              type="button"
+              className={`boton boton-primario boton-auto ${mostrarAlta ? "boton-seleccionado" : ""}`}
+              aria-pressed={mostrarAlta}
+              onClick={() => setMostrarAlta((abierto) => (abierto && mascotas.length > 0 ? false : true))}
+            >
+              {mostrarAlta ? (
+                <>
+                  <Icono nombre="check" tamano={18} grosor={2.4} />
+                  Agregando mascota
+                </>
+              ) : (
+                <>
+                  <Icono nombre="mas" tamano={18} grosor={2.4} />
+                  Agregar mascota
+                </>
+              )}
+            </button>
           </div>
           <p className="texto-suave">
             Registra a tus mascotas para elegir a cuál llevas al agendar. El veterinario verá su especie,
@@ -201,7 +220,7 @@ function MisMascotas() {
 
         <div className="lista-mascotas">
           {mascotas.map((m) => (
-            <article key={m.id} className="tarjeta mascota">
+            <article key={m.id} className="tarjeta mascota mascota-ficha">
               {editando === m.id ? (
                 <FormularioMascota
                   inicial={{ ...m, weight: m.weight === null ? "" : String(m.weight) }}
@@ -211,36 +230,57 @@ function MisMascotas() {
                 />
               ) : (
                 <>
-                  <div className="mascota-icono" aria-hidden="true">
-                    {ICONO_ESPECIE[m.species] || "🐾"}
+                  <div className="mascota-cabeza">
+                    <div className="mascota-icono" aria-hidden="true">
+                      <IconoEspecie especie={m.species} tamano={28} />
+                    </div>
+                    <div className="mascota-datos">
+                      <h3>{m.name}</h3>
+                      <p className="texto-suave">{m.species}</p>
+                    </div>
                   </div>
-                  <div className="mascota-datos">
-                    <h3>{m.name}</h3>
-                    <p className="texto-suave">
-                      {m.species} · {m.sex} · {calcularEdad(m.birthDate)}
-                      {m.weight !== null && ` · ${m.weight} kg`}
-                    </p>
-                  </div>
+
+                  <ul className="mascota-chips" aria-label={`Datos de ${m.name}`}>
+                    <li>{m.sex}</li>
+                    <li>{calcularEdad(m.birthDate)}</li>
+                    {m.weight !== null && <li>{m.weight} kg</li>}
+                  </ul>
+
                   {quitando === m.id ? (
-                    <div className="acciones-linea" role="alertdialog">
+                    <div className="mascota-confirmar" role="alertdialog" aria-label={`Quitar a ${m.name}`}>
                       <span>¿Quitar a {m.name}?</span>
-                      <button type="button" className="boton boton-peligro boton-auto" onClick={() => quitar(m.id)}>
-                        Sí, quitar
-                      </button>
-                      <button type="button" className="boton boton-secundario boton-auto" onClick={() => setQuitando(null)}>
-                        No
-                      </button>
+                      <div className="acciones-linea">
+                        <button type="button" className="boton boton-peligro boton-auto" onClick={() => quitar(m.id)}>
+                          Sí, quitar
+                        </button>
+                        <button type="button" className="boton boton-secundario boton-auto" onClick={() => setQuitando(null)}>
+                          No
+                        </button>
+                      </div>
                     </div>
                   ) : (
-                    <div className="acciones-linea">
+                    <div className="mascota-acciones">
                       <Link to={`/mascotas/${m.id}/historia`} className="boton boton-primario boton-auto">
+                        <Icono nombre="documento" tamano={18} />
                         Historia clínica
                       </Link>
-                      <button type="button" className="boton boton-secundario boton-auto" onClick={() => setEditando(m.id)}>
-                        Editar
+                      <button
+                        type="button"
+                        className="boton boton-secundario boton-auto boton-cuadrado"
+                        aria-label={`Editar a ${m.name}`}
+                        title="Editar"
+                        onClick={() => setEditando(m.id)}
+                      >
+                        <Icono nombre="editar" tamano={18} />
                       </button>
-                      <button type="button" className="boton boton-peligro boton-auto" onClick={() => setQuitando(m.id)}>
-                        Quitar
+                      <button
+                        type="button"
+                        className="boton boton-peligro boton-auto boton-cuadrado"
+                        aria-label={`Quitar a ${m.name}`}
+                        title="Quitar"
+                        onClick={() => setQuitando(m.id)}
+                      >
+                        <Icono nombre="papelera" tamano={18} />
                       </button>
                     </div>
                   )}

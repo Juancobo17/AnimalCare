@@ -1,5 +1,5 @@
 // Estructura visual compartida por las pantallas de login y registro.
-import Huella from "./Huella";
+import Logo from "./Logo";
 import Carrusel from "./Carrusel";
 import "../auth.css";
 
@@ -10,8 +10,7 @@ function AuthLayout({ children, ancho = false }) {
     <div className="auth">
       <section className="auth-presentacion">
         <div className="auth-marca">
-          <Huella tamano={38} color="#ffffff" />
-          <span>AnimalCare</span>
+          <Logo tamano={44} claro lema />
         </div>
 
         <Carrusel />
@@ -20,8 +19,7 @@ function AuthLayout({ children, ancho = false }) {
       <section className="auth-formulario">
         <div className={`auth-tarjeta ${ancho ? "auth-tarjeta-ancha" : ""}`}>
           <div className="auth-marca-movil">
-            <Huella tamano={28} color="#1c6742" />
-            <span>AnimalCare</span>
+            <Logo tamano={36} lema />
           </div>
           {children}
         </div>

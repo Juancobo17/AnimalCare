@@ -5,12 +5,16 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
+import Selector from "../components/Selector";
+import { usarTitulo } from "../hooks/usarTitulo";
 import Cabecera from "../components/Cabecera";
 import Alerta from "../components/Alerta";
 import Adjuntos from "../components/Adjuntos";
+import Icono from "../components/Icono";
 import { obtenerUsuario } from "../services/auth.service";
 import { obtenerHistoria, crearEntrada, modificarEntrada, eliminarEntrada } from "../services/medicalRecord.service";
-import { ICONO_ESPECIE, calcularEdad } from "../services/pet.service";
+import IconoEspecie from "../components/IconoEspecie";
+import { calcularEdad } from "../services/pet.service";
 import { formatearFecha, hoyLocal, completarCita } from "../services/appointment.service";
 import { obtenerMensajesDeError, esErrorDeConexion } from "../services/api";
 
@@ -92,14 +96,14 @@ function FormularioEntrada({ inicial, citasPendientes = [], textoBoton, onGuarda
           <label htmlFor="cita">
             Cita <span className="obligatorio">*</span>
           </label>
-          <select id="cita" name="appointmentId" value={datos.appointmentId} onChange={cambiar}>
+          <Selector id="cita" name="appointmentId" value={datos.appointmentId} onChange={cambiar}>
             <option value="">Elige la cita que estás atendiendo</option>
             {citasPendientes.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.when} · {c.service}
               </option>
             ))}
-          </select>
+          </Selector>
         </div>
       )}
 
@@ -205,7 +209,10 @@ function Entrada({ entrada, esVeterinario, onEditar, onEliminar, onCambio }) {
     return (
       <li className="entrada entrada-anulada">
         <div className="entrada-cabecera">
-          <strong>{formatearFecha(entrada.visitDate)}</strong>
+          <strong className="entrada-fecha">
+            <Icono nombre="calendario" tamano={15} grosor={2} />
+            {formatearFecha(entrada.visitDate)}
+          </strong>
           <span className="etiqueta etiqueta-cancelled">Eliminada</span>
         </div>
         <p className="texto-suave">
@@ -230,7 +237,10 @@ function Entrada({ entrada, esVeterinario, onEditar, onEliminar, onCambio }) {
   return (
     <li className="entrada">
       <div className="entrada-cabecera">
-        <strong>{formatearFecha(entrada.visitDate)}</strong>
+        <strong className="entrada-fecha">
+          <Icono nombre="calendario" tamano={15} grosor={2} />
+          {formatearFecha(entrada.visitDate)}
+        </strong>
         <span className="texto-suave">
           {entrada.vet.name}
           {entrada.vet.specialty ? ` · ${entrada.vet.specialty}` : ""}
@@ -239,12 +249,12 @@ function Entrada({ entrada, esVeterinario, onEditar, onEliminar, onCambio }) {
       </div>
       <h4>{entrada.reason}</h4>
       <dl className="entrada-datos">
-        <div>
+        <div className="entrada-dato-ancho">
           <dt>Diagnóstico</dt>
           <dd>{entrada.diagnosis}</dd>
         </div>
         {entrada.treatment && (
-          <div>
+          <div className="entrada-dato-ancho">
             <dt>Tratamiento</dt>
             <dd>{entrada.treatment}</dd>
           </div>
@@ -266,7 +276,7 @@ function Entrada({ entrada, esVeterinario, onEditar, onEliminar, onCambio }) {
           </div>
         )}
         {entrada.observations && (
-          <div>
+          <div className="entrada-dato-ancho">
             <dt>Observaciones</dt>
             <dd>{entrada.observations}</dd>
           </div>
@@ -274,12 +284,15 @@ function Entrada({ entrada, esVeterinario, onEditar, onEliminar, onCambio }) {
       </dl>
 
       <Adjuntos entrada={entrada} esVeterinario={esVeterinario} onCambio={onCambio} />
+
       {esVeterinario && entrada.canEdit && !eliminando && (
         <div className="acciones-linea no-imprimir">
           <button type="button" className="boton boton-secundario boton-auto" onClick={() => onEditar(entrada)}>
+            <Icono nombre="editar" tamano={16} />
             Modificar
           </button>
           <button type="button" className="boton boton-peligro boton-auto" onClick={() => setEliminando(true)}>
+            <Icono nombre="papelera" tamano={16} />
             Eliminar
           </button>
         </div>
@@ -313,6 +326,7 @@ function Entrada({ entrada, esVeterinario, onEditar, onEliminar, onCambio }) {
 }
 
 function HistoriaClinica() {
+  usarTitulo("Historia clínica");
   const { id } = useParams();
   const [parametros] = useSearchParams();
   const navigate = useNavigate();
@@ -403,7 +417,7 @@ function HistoriaClinica() {
   return (
     <div className="pagina">
       <Cabecera />
-      <main className="contenedor">
+      <main className="contenedor contenedor-medio">
         <Link to={esVeterinario ? "/citas" : "/mascotas"} className="enlace-volver no-imprimir">
           ← {esVeterinario ? "Volver a mi agenda" : "Volver a mis mascotas"}
         </Link>
@@ -411,45 +425,57 @@ function HistoriaClinica() {
         <Alerta tipo="exito" mensajes={exito} />
         <Alerta tipo="error" mensajes={errores} onReintentar={sinConexion ? () => setIntento((n) => n + 1) : undefined} />
 
-        {!historia && errores.length === 0 && <p className="texto-suave">Cargando historia clínica...</p>}
+        {!historia && errores.length === 0 && (
+          <div className="tarjeta" aria-busy="true" aria-label="Cargando historia clínica">
+            <div className="esqueleto" style={{ height: 28, width: "55%", marginBottom: 12 }} />
+            <div className="esqueleto" style={{ height: 16, width: "35%", marginBottom: 24 }} />
+            <div className="esqueleto" style={{ height: 110 }} />
+          </div>
+        )}
 
         {pet && (
           <>
             <div className="tarjeta">
               <div className="encabezado-seccion">
-                <div className="mascota">
+                <div className="mascota historia-mascota">
                   <div className="mascota-icono" aria-hidden="true">
-                    {ICONO_ESPECIE[pet.species] || "🐾"}
+                    <IconoEspecie especie={pet.species} tamano={30} />
                   </div>
                   <div className="mascota-datos">
                     <h1>Historia clínica de {pet.name}</h1>
-                    <p className="texto-suave">
-                      {pet.species} · {pet.sex} · {calcularEdad(pet.birthDate)}
-                      {pet.weight !== null && ` · ${pet.weight} kg`}
-                      {pet.owner && ` · Dueño: ${pet.owner.name}`}
-                    </p>
+                    <ul className="mascota-chips" aria-label={`Datos de ${pet.name}`}>
+                      <li>{pet.species}</li>
+                      <li>{pet.sex}</li>
+                      <li>{calcularEdad(pet.birthDate)}</li>
+                      {pet.weight !== null && <li>{pet.weight} kg</li>}
+                    </ul>
+                    {pet.owner && <p className="texto-suave historia-dueno">Dueño: {pet.owner.name}</p>}
                   </div>
                 </div>
                 <div className="acciones-linea no-imprimir">
                   {esVeterinario && formulario === null && historia.pendingAppointments?.length > 0 && (
                     <button type="button" className="boton boton-primario boton-auto" onClick={() => setFormulario("nueva")}>
-                      + Registrar consulta
+                      <Icono nombre="mas" tamano={18} grosor={2.4} />
+                      Registrar consulta
                     </button>
                   )}
                   {!esVeterinario && vigentes.length > 0 && (
                     <button type="button" className="boton boton-secundario boton-auto" onClick={() => window.print()}>
+                      <Icono nombre="imprimir" tamano={18} />
                       Imprimir
                     </button>
                   )}
                 </div>
               </div>
               {esVeterinario && historia.pendingAppointments?.length > 0 && formulario === null && (
-                <p className="aviso-suave">
+                <p className="aviso-suave dato-icono">
+                  <Icono nombre="documento" tamano={18} />
                   Tienes {historia.pendingAppointments.length} consulta(s) con {pet.name} sin registrar en la historia.
                 </p>
               )}
               {esVeterinario && historia.pendingAppointments?.length === 0 && !atencion && (
-                <p className="aviso-suave">
+                <p className="aviso-suave dato-icono">
+                  <Icono nombre="documento" tamano={18} />
                   Cada entrada se registra desde una cita: podrás hacerlo en cuanto empiece la próxima consulta con{" "}
                   {pet.name}.
                 </p>
@@ -537,11 +563,19 @@ function HistoriaClinica() {
             <div className="tarjeta">
               <h3>Consultas ({vigentes.length})</h3>
               {vigentes.length === 0 ? (
-                <p className="texto-suave">
-                  {esVeterinario
-                    ? `Aún no hay entradas en la historia de ${pet.name}.`
-                    : `Todavía no hay registros en la historia clínica de ${pet.name}. El veterinario los agrega después de cada consulta.`}
-                </p>
+                <div className="estado-vacio estado-vacio-compacto">
+                  <span className="estado-vacio-icono">
+                    <Icono nombre="documento" tamano={26} />
+                  </span>
+                  <div>
+                    <h2>Sin consultas registradas</h2>
+                    <p className="texto-suave">
+                      {esVeterinario
+                        ? `Aún no hay entradas en la historia de ${pet.name}.`
+                        : `Todavía no hay registros en la historia clínica de ${pet.name}. El veterinario los agrega después de cada consulta.`}
+                    </p>
+                  </div>
+                </div>
               ) : (
                 <ul className="historia">
                   {vigentes.map((entrada) => (

@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import { usarTitulo } from "../hooks/usarTitulo";
 import Cabecera from "../components/Cabecera";
+import Icono from "../components/Icono";
+import Estrellas from "../components/Estrellas";
 import Alerta from "../components/Alerta";
 import FotoVeterinario from "../components/FotoVeterinario";
 import Calificacion from "../components/Calificacion";
@@ -30,6 +33,7 @@ function VeterinarioDetalle() {
   const { id } = useParams();
 
   const [veterinario, setVeterinario] = useState(null);
+  usarTitulo(veterinario?.name || "Veterinario");
   const [errores, setErrores] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [sinConexion, setSinConexion] = useState(false);
@@ -124,6 +128,8 @@ function VeterinarioDetalle() {
               </dl>
             </div>
 
+            <div className="detalle-cols">
+              <div className="detalle-col">
             <div className="tarjeta">
               <h3>Servicios</h3>
 
@@ -150,11 +156,41 @@ function VeterinarioDetalle() {
               )}
             </div>
 
+            <div className="tarjeta">
+              <h3>Opiniones {veterinario.reviewsCount > 0 && `(${veterinario.reviewsCount})`}</h3>
+              {veterinario.reviews.length === 0 ? (
+                <p className="texto-suave">
+                  Todavía no tiene opiniones. Los dueños pueden calificar después de una cita atendida.
+                </p>
+              ) : (
+                <ul className="lista-resenas">
+                  {veterinario.reviews.map((r, i) => (
+                    <li key={i}>
+                      <div className="resena-cabecera">
+                        <span className="calificacion-estrellas" role="img" aria-label={`${r.rating} de 5`}>
+                          <Estrellas valor={r.rating} />
+                        </span>
+                        <strong>{r.author}</strong>
+                        <span className="texto-suave">
+                          {new Date(r.createdAt).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" })}
+                        </span>
+                      </div>
+                      {r.comment && <p>{r.comment}</p>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+              </div>
+              <div className="detalle-col">
             {/* Ubicacion del consultorio en un mapa (sin clave de API). */}
             {veterinario.clinicService && veterinario.address && (
               <div className="tarjeta">
                 <h3>Cómo llegar</h3>
-                <p className="texto-suave">📍 {veterinario.address}</p>
+                <p className="texto-suave dato-icono">
+                <Icono nombre="ubicacion" tamano={16} grosor={2} />
+                {veterinario.address}
+              </p>
                 <iframe
                   className="mapa"
                   title={`Mapa: ${veterinario.address}`}
@@ -174,33 +210,6 @@ function VeterinarioDetalle() {
             )}
 
             <div className="tarjeta">
-              <h3>Opiniones {veterinario.reviewsCount > 0 && `(${veterinario.reviewsCount})`}</h3>
-              {veterinario.reviews.length === 0 ? (
-                <p className="texto-suave">
-                  Todavía no tiene opiniones. Los dueños pueden calificar después de una cita atendida.
-                </p>
-              ) : (
-                <ul className="lista-resenas">
-                  {veterinario.reviews.map((r, i) => (
-                    <li key={i}>
-                      <div className="resena-cabecera">
-                        <span className="calificacion-estrellas" aria-label={`${r.rating} de 5`}>
-                          {"★".repeat(r.rating)}
-                          {"☆".repeat(5 - r.rating)}
-                        </span>
-                        <strong>{r.author}</strong>
-                        <span className="texto-suave">
-                          {new Date(r.createdAt).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" })}
-                        </span>
-                      </div>
-                      {r.comment && <p>{r.comment}</p>}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            <div className="tarjeta">
               <h3>Horario de atención</h3>
 
               {horario.length === 0 ? (
@@ -215,6 +224,8 @@ function VeterinarioDetalle() {
                   ))}
                 </ul>
               )}
+            </div>
+              </div>
             </div>
           </>
         )}

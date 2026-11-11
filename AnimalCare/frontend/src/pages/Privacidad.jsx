@@ -2,21 +2,22 @@
 // Pagina publica: se enlaza desde el registro y desde "Mi cuenta".
 import { Link } from "react-router-dom";
 
-import Huella from "../components/Huella";
+import { usarTitulo } from "../hooks/usarTitulo";
+import Logo from "../components/Logo";
 import { haySesionActiva } from "../services/auth.service";
 
 function Privacidad() {
+  usarTitulo("Privacidad");
   return (
     <div className="pagina">
       <header className="cabecera">
         <div className="cabecera-interior">
           <Link to={haySesionActiva() ? "/dashboard" : "/login"} className="cabecera-marca" aria-label="AnimalCare">
-            <Huella tamano={26} color="#1c6742" />
-            <span>AnimalCare</span>
+            <Logo tamano={34} claro />
           </Link>
         </div>
       </header>
-      <main className="contenedor documento">
+      <main className="contenedor contenedor-medio documento">
         <div className="tarjeta">
           <h1>Política de privacidad y tratamiento de datos</h1>
           <p className="texto-suave">Última actualización: noviembre de 2026. Proyecto académico de AnimalCare.</p>

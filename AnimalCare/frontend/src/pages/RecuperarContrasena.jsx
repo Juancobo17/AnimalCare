@@ -2,12 +2,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
+import { usarTitulo } from "../hooks/usarTitulo";
 import AuthLayout from "../components/AuthLayout";
 import Alerta from "../components/Alerta";
 import { solicitarRecuperacion } from "../services/account.service";
 import { obtenerMensajesDeError } from "../services/api";
 
 function RecuperarContrasena() {
+  usarTitulo("Recuperar contraseña");
   const [email, setEmail] = useState("");
   const [errores, setErrores] = useState([]);
   const [exito, setExito] = useState([]);
@@ -36,7 +38,7 @@ function RecuperarContrasena() {
       <h1>Recuperar contraseña</h1>
       <p className="auth-subtitulo">Te enviaremos un enlace para crear una contraseña nueva.</p>
 
-      <Alerta tipo="exito" mensajes={exito} />
+      <Alerta tipo="exito" fijo mensajes={exito} />
       <Alerta tipo="error" mensajes={errores} />
 
       {exito.length === 0 && (
