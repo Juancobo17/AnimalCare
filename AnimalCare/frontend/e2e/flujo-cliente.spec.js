@@ -61,8 +61,14 @@ test("inicio de sesion, mascota, buscador y cierre de sesion", async ({ page }) 
   await expect(page.getByText(/No encontramos veterinarios/)).toBeVisible();
 
   // Cerrar sesion y proteccion de rutas (AN-32 escenario 3).
-  await page.getByRole("button", { name: /Cliente/ }).click();
-  await page.getByRole("menuitem", { name: "Cerrar sesión" }).click();
+  // La cabecera puede tener un boton "Cerrar sesion" directo o un menu de la cuenta.
+  const menuCuenta = page.getByRole("button", { name: /Cliente/ });
+  if (await menuCuenta.count()) {
+    await menuCuenta.click();
+    await page.getByRole("menuitem", { name: "Cerrar sesión" }).click();
+  } else {
+    await page.getByRole("button", { name: "Cerrar sesión" }).click();
+  }
   await expect(page).toHaveURL(/\/login$/);
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/login$/);
