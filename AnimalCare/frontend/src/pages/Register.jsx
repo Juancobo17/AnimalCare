@@ -42,6 +42,7 @@ function Register() {
     bio: "",
     homeService: false,
     clinicService: true,
+    acceptPrivacy: false,
   });
 
   const [servicios, setServicios] = useState([{ ...SERVICIO_VACIO }]);
@@ -121,6 +122,11 @@ function Register() {
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(datos.email.trim())) {
       mensajes.push("El correo no tiene un formato válido.");
       porCampo.email = true;
+    }
+
+    if (!datos.acceptPrivacy) {
+      mensajes.push("Debes aceptar la política de privacidad y el tratamiento de datos.");
+      porCampo.acceptPrivacy = true;
     }
 
     if (datos.password.trim() === "") {
@@ -216,6 +222,7 @@ function Register() {
         email: datos.email.trim(),
         password: datos.password,
         role: rol,
+        acceptPrivacy: datos.acceptPrivacy,
       };
 
       if (esVeterinario) {
@@ -240,8 +247,8 @@ function Register() {
 
       setExito([
         esVeterinario
-          ? "Registro exitoso. Tu perfil está en revisión para validar tu tarjeta profesional."
-          : "Tu cuenta fue creada correctamente. Ya puedes iniciar sesión.",
+          ? "Registro exitoso. Tu perfil está en revisión para validar tu tarjeta profesional. Te enviamos un correo para confirmar tu dirección."
+          : "Tu cuenta fue creada correctamente. Te enviamos un correo para confirmar tu dirección. Ya puedes iniciar sesión.",
       ]);
 
       // Lleva al login para que la persona entre con sus credenciales.
@@ -546,6 +553,17 @@ function Register() {
             </p>
           </>
         )}
+
+        <label className={`casilla consentimiento ${erroresCampo.acceptPrivacy ? "con-error" : ""}`}>
+          <input type="checkbox" name="acceptPrivacy" checked={datos.acceptPrivacy} onChange={manejarCambio} />
+          <span>
+            Acepto la{" "}
+            <Link to="/privacidad" target="_blank" rel="noreferrer">
+              política de privacidad
+            </Link>{" "}
+            y el tratamiento de mis datos personales. <span className="obligatorio">*</span>
+          </span>
+        </label>
 
         <button type="submit" className="boton boton-primario boton-enviar" disabled={enviando}>
           {enviando ? "Creando cuenta..." : "Crear cuenta"}

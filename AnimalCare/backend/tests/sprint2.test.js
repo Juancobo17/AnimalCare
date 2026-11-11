@@ -86,6 +86,7 @@ function registroVeterinario(email, license, name = NOMBRE_VET) {
       name,
       email,
       password: CLAVE,
+      acceptPrivacy: true,
       role: "VETERINARIAN",
       license,
       specialty: "Dermatología",
@@ -126,7 +127,7 @@ before(async () => {
 
   for (const clave of ["clienteA", "clienteB"]) {
     const r = await http("POST", "/auth/register", {
-      body: { name: `Cliente ${clave} QA`, email: ctx.emails[clave], password: CLAVE },
+      body: { name: `Cliente ${clave} QA`, email: ctx.emails[clave], password: CLAVE, acceptPrivacy: true },
     });
     assert.equal(r.status, 201, errores(r));
   }
@@ -146,13 +147,15 @@ before(async () => {
 
 after(async () => {
   const usuarios = await prisma.user.findMany({
-    where: { email: { startsWith: PREFIJO } },
+    // Una cuenta eliminada cambia de correo: se busca tambien por el id que creo la prueba.
+    where: { OR: [{ email: { startsWith: PREFIJO } }, { id: { in: ctx.creados || [] } }] },
     include: { vetProfile: true },
   });
   const userIds = usuarios.map((u) => u.id);
   const vetIds = usuarios.filter((u) => u.vetProfile).map((u) => u.vetProfile.id);
 
   await prisma.notification.deleteMany({ where: { userId: { in: userIds } } });
+  await prisma.authToken.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.medicalRecord.deleteMany({
     where: { OR: [{ pet: { userId: { in: userIds } } }, { vetProfileId: { in: vetIds } }] },
   });
@@ -1320,6 +1323,174 @@ describe("Mejora: paginacion del panel de administracion", () => {
   test("pagina o tamano invalidos responden 400", async () => {
     assert.equal((await http("GET", "/admin/users?page=0", { token: ctx.admin })).status, 400);
     assert.equal((await http("GET", "/admin/users?pageSize=500", { token: ctx.admin })).status, 400);
+  });
+});
+
+// ======================= Cuentas y seguridad =======================
+
+const fs = require("node:fs");
+
+// Ultimo correo enviado a una direccion (el backend los escribe en MAIL_OUTBOX_FILE).
+function ultimoCorreo(para) {
+  const archivo = process.env.MAIL_OUTBOX_FILE;
+  if (!archivo || !fs.existsSync(archivo)) return null;
+  const lineas = fs.readFileSync(archivo, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  return lineas.reverse().find((c) => c.to === para) || null;
+}
+function tokenDelCorreo(correo) {
+  return /token=([0-9a-f]{64})/.exec(correo?.text || "")?.[1] || null;
+}
+
+describe("Cuenta: consentimiento y verificacion de correo", () => {
+  test("el registro exige aceptar la politica de privacidad", async () => {
+    const r = await http("POST", "/auth/register", {
+      body: { name: "Sin consentimiento", email: `${PREFIJO}.sinc@test.com`, password: CLAVE },
+    });
+    assert.equal(r.status, 400);
+    assert.match(errores(r), /política de privacidad/);
+  });
+
+  test("al registrarse se envia un correo de verificacion y el enlace confirma el correo", async (t) => {
+    if (!process.env.MAIL_OUTBOX_FILE) {
+      t.skip("MAIL_OUTBOX_FILE no definido: no se puede leer el correo enviado");
+      return;
+    }
+    const correo = ultimoCorreo(ctx.emails.clienteB);
+    assert.ok(correo, "deberia haber un correo de verificacion");
+    const token = tokenDelCorreo(correo);
+    assert.ok(token);
+
+    const antes = await http("GET", "/auth/me", { token: ctx.clienteB });
+    assert.equal(antes.data.user.emailVerified, false);
+
+    const r = await http("POST", "/auth/verify-email", { body: { token } });
+    assert.equal(r.status, 200, errores(r));
+    const despues = await http("GET", "/auth/me", { token: ctx.clienteB });
+    assert.equal(despues.data.user.emailVerified, true);
+
+    // El enlace es de un solo uso.
+    assert.equal((await http("POST", "/auth/verify-email", { body: { token } })).status, 400);
+    assert.equal((await http("POST", "/account/resend-verification", { token: ctx.clienteB })).status, 409);
+  });
+
+  test("un enlace invalido responde 400", async () => {
+    assert.equal((await http("POST", "/auth/verify-email", { body: { token: "abc" } })).status, 400);
+  });
+});
+
+describe("Cuenta: recuperar contrasena", () => {
+  test("responde igual exista o no el correo, y solo crea token para correos registrados", async () => {
+    const antes = await prisma.authToken.count({ where: { purpose: "PASSWORD_RESET" } });
+    const existe = await http("POST", "/auth/forgot-password", { body: { email: ctx.emails.clienteA } });
+    const noExiste = await http("POST", "/auth/forgot-password", { body: { email: `${PREFIJO}.nadie@test.com` } });
+    assert.equal(existe.status, 200);
+    assert.equal(noExiste.status, 200);
+    assert.equal(existe.data.message, noExiste.data.message);
+    const despues = await prisma.authToken.count({ where: { purpose: "PASSWORD_RESET" } });
+    assert.equal(despues - antes, 1);
+  });
+
+  test("con el enlace del correo se cambia la contrasena y el enlace deja de servir", async (t) => {
+    if (!process.env.MAIL_OUTBOX_FILE) {
+      t.skip("MAIL_OUTBOX_FILE no definido");
+      return;
+    }
+    const token = tokenDelCorreo(ultimoCorreo(ctx.emails.clienteA));
+    assert.ok(token, "deberia haber un correo de recuperacion");
+
+    const debil = await http("POST", "/auth/reset-password", { body: { token, password: "abc" } });
+    assert.equal(debil.status, 400);
+
+    const r = await http("POST", "/auth/reset-password", { body: { token, password: "nueva123" } });
+    assert.equal(r.status, 200, errores(r));
+    assert.equal((await login(ctx.emails.clienteA, CLAVE)).status, 401);
+    assert.equal((await login(ctx.emails.clienteA, "nueva123")).status, 200);
+    assert.equal((await http("POST", "/auth/reset-password", { body: { token, password: "otra123" } })).status, 400);
+
+    // Se deja como estaba para el resto de pruebas.
+    ctx.clienteA = (await login(ctx.emails.clienteA, "nueva123")).data.token;
+    const vuelta = await http("PUT", "/account/password", {
+      token: ctx.clienteA,
+      body: { currentPassword: "nueva123", newPassword: CLAVE },
+    });
+    assert.equal(vuelta.status, 200, errores(vuelta));
+  });
+});
+
+describe("Cuenta: mi cuenta", () => {
+  test("edita el nombre", async () => {
+    const r = await http("PUT", "/account", { token: ctx.clienteB, body: { name: "Cliente B Renombrado" } });
+    assert.equal(r.status, 200, errores(r));
+    assert.equal(r.data.user.name, "Cliente B Renombrado");
+    assert.equal((await http("PUT", "/account", { token: ctx.clienteB, body: { name: " " } })).status, 400);
+  });
+
+  test("cambiar la contrasena exige la actual y una nueva valida", async () => {
+    const mal = await http("PUT", "/account/password", {
+      token: ctx.clienteB,
+      body: { currentPassword: "incorrecta9", newPassword: "nueva123" },
+    });
+    assert.equal(mal.status, 400);
+    const igual = await http("PUT", "/account/password", {
+      token: ctx.clienteB,
+      body: { currentPassword: CLAVE, newPassword: CLAVE },
+    });
+    assert.equal(igual.status, 400);
+  });
+
+  test("eliminar la cuenta exige la contrasena, anonimiza y cancela citas futuras", async () => {
+    const reg = await http("POST", "/auth/register", {
+      body: { name: "Cliente Efimero", email: `${PREFIJO}.efimero@test.com`, password: CLAVE, acceptPrivacy: true },
+    });
+    assert.equal(reg.status, 201, errores(reg));
+    ctx.creados = [...(ctx.creados || []), reg.data.user.id];
+    const token = await tokenDe(`${PREFIJO}.efimero@test.com`);
+    const cita = await http("POST", "/appointments", {
+      token,
+      body: { vetProfileId: ctx.vetProfileId, mode: "CLINIC", date: VIERNES, time: "11:30" },
+    });
+    assert.equal(cita.status, 201, errores(cita));
+
+    assert.equal((await http("DELETE", "/account", { token, body: { password: "mala123" } })).status, 400);
+    const r = await http("DELETE", "/account", { token, body: { password: CLAVE } });
+    assert.equal(r.status, 200, errores(r));
+
+    assert.equal((await http("GET", "/appointments", { token })).status, 403, "el token deja de servir");
+    assert.equal((await login(`${PREFIJO}.efimero@test.com`)).status, 401, "el correo ya no existe");
+    const usuario = await prisma.user.findUnique({ where: { id: reg.data.user.id } });
+    assert.equal(usuario.status, "DELETED");
+    assert.equal(usuario.name, "Usuario eliminado");
+    assert.ok(!usuario.email.includes("efimero"));
+    const citaDb = await prisma.appointment.findUnique({ where: { id: cita.data.appointment.id } });
+    assert.equal(citaDb.status, "CANCELLED");
+
+    const admin = await http("GET", "/admin/users?status=DELETED", { token: ctx.admin });
+    assert.ok(admin.data.users.some((u) => u.id === reg.data.user.id));
+    assert.equal((await http("PATCH", `/admin/users/${reg.data.user.id}/suspend`, { token: ctx.admin })).status, 409);
+  });
+});
+
+describe("Seguridad: limite de intentos de inicio de sesion", () => {
+  test("tras 5 intentos fallidos el sexto responde 429 aunque la clave sea correcta", async () => {
+    const email = `${PREFIJO}.bloqueo@test.com`;
+    const reg = await http("POST", "/auth/register", {
+      body: { name: "Cliente Bloqueo", email, password: CLAVE, acceptPrivacy: true },
+    });
+    assert.equal(reg.status, 201, errores(reg));
+    for (let i = 0; i < 5; i += 1) {
+      assert.equal((await login(email, "incorrecta1")).status, 401);
+    }
+    const bloqueado = await login(email, CLAVE);
+    assert.equal(bloqueado.status, 429);
+    assert.match(bloqueado.data.message, /Demasiados intentos/);
+    // Otro usuario no se ve afectado.
+    assert.equal((await login(ctx.emails.clienteB)).status, 200);
+  });
+
+  test("las respuestas llevan cabeceras de seguridad", async () => {
+    const r = await fetch(`${API}/health`);
+    assert.equal(r.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(r.headers.get("x-frame-options"), "DENY");
   });
 });
 

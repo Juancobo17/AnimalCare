@@ -35,6 +35,14 @@ enum AccountStatus {
   ACTIVE
   SUSPENDED
   REJECTED
+  // La persona elimino su cuenta: se anonimiza y no puede volver a entrar.
+  DELETED
+}
+
+// Fin de un token de un solo uso enviado por correo.
+enum TokenPurpose {
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
 }
 
 // Modalidad de atencion de una cita.
@@ -63,6 +71,15 @@ model User {
   status    AccountStatus @default(ACTIVE)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
+
+  // Cuando confirmo su correo con el enlace de verificacion (null = aun no).
+  emailVerifiedAt   DateTime?
+  // Cuando acepto la politica de privacidad y el tratamiento de datos (Ley 1581).
+  privacyAcceptedAt DateTime?
+  // Cuando elimino su cuenta.
+  deletedAt         DateTime?
+
+  tokens AuthToken[]
 
   // Un usuario puede tener muchas mascotas (1:N)
   pets Pet[]
@@ -304,3 +321,18 @@ model MedicalRecord {
   @@index([petId, visitDate])
 }
 
+// Token de un solo uso para recuperar la contrasena o verificar el correo.
+// Se guarda el hash (SHA-256) del token, nunca el token en claro.
+model AuthToken {
+  id        Int          @id @default(autoincrement())
+  tokenHash String       @unique
+  purpose   TokenPurpose
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime     @default(now())
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  @@index([userId, purpose])
+}

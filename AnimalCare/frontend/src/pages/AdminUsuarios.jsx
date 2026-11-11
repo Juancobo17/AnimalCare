@@ -23,6 +23,7 @@ const CLASE_ESTADO = {
   ACTIVE: "etiqueta-confirmed",
   SUSPENDED: "etiqueta-cancelled",
   REJECTED: "etiqueta-cancelled",
+  DELETED: "etiqueta-completed",
 };
 
 function formatearFechaRegistro(fecha) {

@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 
 const { PHOTOS_DIR } = require("./utils/uploads");
+const { securityHeaders } = require("./middleware/security.middleware");
 
 const healthRoutes = require("./routes/health.routes");
 const authRoutes = require("./routes/auth.routes");
@@ -11,11 +12,30 @@ const notificationRoutes = require("./routes/notification.routes");
 const adminRoutes = require("./routes/admin.routes");
 const petRoutes = require("./routes/pet.routes");
 const medicalRecordRoutes = require("./routes/medicalRecord.routes");
+const accountRoutes = require("./routes/account.routes");
 
 const app = express();
 
-// Permite que el frontend (Vite, otro puerto) consuma la API.
-app.use(cors());
+// Si corre detras de un proxy (nginx, Docker), la IP real viene en X-Forwarded-For.
+app.set("trust proxy", process.env.TRUST_PROXY === "true" ? 1 : false);
+
+app.use(securityHeaders);
+
+// Solo los origenes autorizados pueden consumir la API desde el navegador.
+// CORS_ORIGIN admite varios separados por coma. En desarrollo, el frontend de Vite.
+const ORIGENES = (process.env.CORS_ORIGIN || "http://localhost:5173,http://127.0.0.1:5173")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Sin cabecera Origin (curl, Postman, mismo origen): se permite.
+      if (!origin || ORIGENES.includes(origin)) return callback(null, true);
+      return callback(null, false);
+    },
+  })
+);
 
 // La foto y la tarjeta profesional llegan en base64: esas dos rutas aceptan
 // cuerpos mas grandes. Van antes del lector general, que ya no los vuelve a leer.
@@ -36,6 +56,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/pets", petRoutes);
 app.use("/api/medical-records", medicalRecordRoutes);
+app.use("/api/account", accountRoutes);
 
 // Ruta no encontrada
 app.use((req, res) => {

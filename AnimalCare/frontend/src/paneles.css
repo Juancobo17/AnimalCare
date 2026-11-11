@@ -1328,3 +1328,37 @@
   }
 }
 
+/* ---------- Cuenta y privacidad ---------- */
+
+.consentimiento {
+  align-items: flex-start;
+  margin: 8px 0 4px;
+  font-size: 0.9rem;
+}
+
+.consentimiento input {
+  margin-top: 3px;
+}
+
+.consentimiento.con-error {
+  padding: 8px;
+  background-color: var(--error-fondo);
+  border: 1px solid var(--error-borde);
+  border-radius: var(--radio);
+}
+
+.zona-peligro {
+  border-color: var(--error-borde);
+}
+
+.documento h3 {
+  margin-top: 24px;
+}
+
+.documento ul {
+  padding-left: 20px;
+}
+
+.documento li {
+  margin-bottom: 6px;
+}

@@ -106,6 +106,9 @@ function Login() {
       </form>
 
       <p className="auth-pie">
+        <Link to="/recuperar">¿Olvidaste tu contraseña?</Link>
+      </p>
+      <p className="auth-pie">
         ¿Aún no tienes cuenta? <Link to="/register">Crear una cuenta</Link>
       </p>
     </AuthLayout>
